@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Calendar customization */
+.fc-event {
+    @apply cursor-pointer;
+}
+
+.fc-day-today {
+    @apply bg-blue-50;  /* Changed from bg-primary-50 */
+}
+
+.fc-button {
+    @apply bg-blue-500 hover:bg-blue-600;  /* Changed from primary colors */
+}
