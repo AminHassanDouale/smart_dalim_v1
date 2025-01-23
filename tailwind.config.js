@@ -12,7 +12,11 @@ export default {
         "./vendor/robsontenorio/mary/src/View/Components/**/*.php"
     ],
     theme: {
-        extend: {},
+        extend: {
+            fontFamily: {
+                'arabic': ['Traditional Arabic', 'serif'],
+            },
+        },
     },
 
     safelist: [{

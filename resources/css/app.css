@@ -14,3 +14,32 @@
 .fc-button {
     @apply bg-blue-500 hover:bg-blue-600;  /* Changed from primary colors */
 }
+
+/* Arabic Font and Tajweed Styles */
+.font-arabic {
+    font-family: 'KFGQPC HAFS Uthmanic Script', Arial;
+    font-size: 1.5rem;
+    line-height: 2.5;
+}
+
+/* Tajweed Colors */
+.ham_wasl { color: #AAAAAA; }
+.madda_normal { color: #537FFF; }
+.madda_permissible { color: #4050FF; }
+.madda_necessary { color: #000EBC; }
+.qalaqah { color: #DD0008; }
+.madda_obligatory { color: #2144C1; }
+.ikhafa_shafawi { color: #D500B7; }
+.ikhafa { color: #9400A8; }
+.ghunnah { color: #FF7E1E; }
+.idgham_shafawi { color: #58B800; }
+.idgham_ghunnah { color: #419200; }
+.idgham_wo_ghunnah { color: #3B7600; }
+.iqlab { color: #026IBD; }
+.ikhafa_with_iqlab { color: #590099; }
+.ikhafa_with_idgham_ghunnah { color: #8500A8; }
+@layer base {
+    .font-arabic {
+        font-family: 'Traditional Arabic', serif;
+    }
+}

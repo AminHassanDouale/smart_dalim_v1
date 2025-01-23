@@ -31,9 +31,9 @@ class extends Component
             if ($user->role === 'parent') {
                 // Check if parent profile is completed
                 if ($user->parentProfile && $user->parentProfile->has_completed_profile) {
-                    $this->redirect('/parents/dashboard', navigate: true);
-                } else {
                     $this->redirect('/parents/profile-setup', navigate: true);
+                } else {
+                    $this->redirect('/parents/dashboard', navigate: true);
                 }
                 return;
             } elseif ($user->role === 'teacher') {

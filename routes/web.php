@@ -53,6 +53,8 @@ Volt::route('/parents/profile', 'parents.profile')
 // Add the dashboard route
 Volt::route('/parents/dashboard', 'parents.dashboard')
     ->name('parents.dashboard');
+    Volt::route('/parents/management/schedule', 'parents.managments.schedule')
+    ->name('parents.schedule.management');
 });
 
 // Teacher Routes
@@ -77,22 +79,34 @@ Route::middleware(['auth', 'role:teacher'])->group(function () {
 
 //quran
 // Quran Routes
-Route::middleware(['auth'])->prefix('recites')->name('recites.')->group(function () {
-    Volt::route('/index', 'recites.index')
-        ->name('index');
+Route::middleware(['auth'])->group(function () {
+    Volt::route('/recites', 'recites.index')
+        ->name('recites.index');
 
-    Volt::route('/chapter/{id}', 'recites.chapter')
-        ->name('chapter');
+    Volt::route('/recites/chapter/{id}', 'recites.chapter')
+        ->name('recites.chapter');
 
     // Page-specific routes
-    Volt::route('/page/{page}', 'recites.verse-by-page')
-        ->name('page')
+    Volt::route('/recites/page/{page}', 'recites.verse-by-page')
+        ->name('recites.page')
         ->where('page', '[1-9][0-9]*');
 
     // Chapter-specific page routes
-    Volt::route('/chapter/{chapter}/page/{page}', 'recites.verse-by-page')
-        ->name('chapter.page')
+    Volt::route('/recites/chapter/{chapter}/page/{page}', 'recites.verse-by-page')
+        ->name('recites.chapter.page')
         ->where(['chapter' => '[1-9][0-9]*', 'page' => '[1-9][0-9]*']);
+});
+Route::middleware(['auth'])->group(function () {
+    Volt::route('/hadiths', 'hadiths.index')->name('hadiths.index');
+    Volt::route('/hadiths/{edition}', 'hadiths.show')->name('hadiths.show');
+
+});
+
+Route::middleware(['auth'])->group(function () {
+    Volt::route('/books', 'books.index')->name('books.index');
+    Volt::route('/books/create', 'books.create')->name('books.create');
+    Volt::route('/books/show/{id}', 'books.show')->name('books.show');
+
 });
 
 // Store Routes (if needed)

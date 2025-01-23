@@ -7,6 +7,8 @@
     <title>{{ isset($title) ? $title.' - '.config('app.name') : config('app.name') }}</title>
     <script src="https://cdn.jsdelivr.net/npm/vanilla-calendar-pro@2.9.6/build/vanilla-calendar.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/vanilla-calendar-pro@2.9.6/build/vanilla-calendar.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Traditional+Arabic&display=swap" rel="stylesheet">
+
 
 
     <link rel="shortcut icon" type="image/x-icon" href="{{ asset('/favicon.ico') }}">

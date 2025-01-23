@@ -2,22 +2,24 @@
 
 namespace Database\Factories;
 
+use App\Models\TeacherProfile;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
-/**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\TeacherProfile>
- */
 class TeacherProfileFactory extends Factory
 {
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
+    protected $model = TeacherProfile::class;
+
     public function definition(): array
     {
         return [
-            //
+            'whatsapp' => fake()->phoneNumber(),
+            'phone' => fake()->phoneNumber(),
+            'fix_number' => fake()->phoneNumber(),
+            'photo' => 'default-teacher.jpg',
+            'date_of_birth' => fake()->date(),
+            'place_of_birth' => fake()->city(),
+            'has_completed_profile' => true,
+            'status' => TeacherProfile::STATUS_VERIFIED,
         ];
     }
 }

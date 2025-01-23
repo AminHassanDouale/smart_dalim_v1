@@ -2,40 +2,49 @@
 
 namespace Database\Factories;
 
+use App\Models\User;
+use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 class UserFactory extends Factory
 {
-    /**
-     * The valid roles as defined in the database ENUM
-     */
-    protected array $validRoles = ['parent', 'teacher'];
+    protected $model = User::class;
 
     public function definition(): array
     {
-        $name = fake()->name();
-
         return [
-            'name' => $name,
-            'username' => $this->generateUniqueUsername($name),
+            'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
-            'password' => Hash::make('password'),
+            'password' => Hash::make('password'), // default password for testing
             'remember_token' => Str::random(10),
-            'role' => fake()->randomElement($this->validRoles),
+            'username' => fake()->unique()->userName(),
         ];
     }
 
     /**
-     * Generate a unique username based on the user's name.
+     * State for parent users.
      */
-    protected function generateUniqueUsername(string $name): string
+    public function parent(): static
     {
-        $baseUsername = Str::lower(str_replace(' ', '.', $name));
-        $baseUsername = preg_replace('/[^a-z0-9.]/', '', $baseUsername);
-        return $baseUsername . random_int(100, 999);
+        return $this->state(function (array $attributes) {
+            return [
+                'role' => User::ROLE_PARENT,
+            ];
+        });
+    }
+
+    /**
+     * State for teacher users.
+     */
+    public function teacher(): static
+    {
+        return $this->state(function (array $attributes) {
+            return [
+                'role' => User::ROLE_TEACHER,
+            ];
+        });
     }
 
     /**
@@ -45,26 +54,6 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'email_verified_at' => null,
-        ]);
-    }
-
-    /**
-     * Configure the model as a parent user.
-     */
-    public function parent(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'role' => 'parent',
-        ]);
-    }
-
-    /**
-     * Configure the model as a teacher user.
-     */
-    public function teacher(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'role' => 'teacher',
         ]);
     }
 }

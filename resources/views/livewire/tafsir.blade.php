@@ -35,9 +35,32 @@ new class extends Component {
         }
     }
 
+    public $tafsirInfo = null;
+
     public function selectTafsir($id)
     {
         $this->selectedTafsir = collect($this->tafsirs)->firstWhere('id', $id);
+        $this->fetchTafsirInfo($id);
+    }
+
+    public function fetchTafsirInfo($id)
+    {
+        try {
+            $this->isLoading = true;
+            $this->error = null;
+
+            $response = Http::get("https://api.quran.com/api/v4/resources/tafsirs/{$id}/info");
+
+            if ($response->successful()) {
+                $this->tafsirInfo = $response->json();
+            } else {
+                $this->error = 'Failed to fetch tafsir information. Please try again later.';
+            }
+        } catch (\Exception $e) {
+            $this->error = 'An error occurred while fetching tafsir information.';
+        } finally {
+            $this->isLoading = false;
+        }
     }
 }; ?>
 
@@ -104,10 +127,35 @@ new class extends Component {
                         </svg>
                     </button>
                 </div>
-                <div class="space-y-2">
-                    <p class="text-sm text-gray-500">Author: {{ $selectedTafsir['author_name'] }}</p>
-                    <p class="text-sm text-gray-500">Language: {{ $selectedTafsir['language_name'] }}</p>
-                    <p class="text-sm text-gray-500">Slug: {{ $selectedTafsir['slug'] }}</p>
+                <div class="space-y-4">
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-900">Basic Information</h4>
+                        <div class="mt-2 space-y-2">
+                            <p class="text-sm text-gray-500">Author: {{ $selectedTafsir['author_name'] }}</p>
+                            <p class="text-sm text-gray-500">Language: {{ $selectedTafsir['language_name'] }}</p>
+                            <p class="text-sm text-gray-500">Slug: {{ $selectedTafsir['slug'] }}</p>
+                        </div>
+                    </div>
+
+                    @if($tafsirInfo && !$isLoading)
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900">Detailed Information</h4>
+                            <div class="mt-2 prose-sm prose">
+                                <div class="p-4 rounded-lg bg-gray-50">
+                                    {!! $tafsirInfo['info'] !!}
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if($isLoading)
+                        <div class="flex justify-center py-4">
+                            <svg class="w-5 h-5 animate-spin text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>
