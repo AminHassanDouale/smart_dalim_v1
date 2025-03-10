@@ -48,4 +48,14 @@ class Course extends Model
    {
        return $this->hasMany(Enrollment::class);
    }
+   public function scopeActive($query)
+   {
+       return $query->where('status', 'active');
+   }
+
+   // Add relationship to learning sessions
+   public function learningSessions()
+   {
+       return $this->hasMany(LearningSession::class);
+   }
 }

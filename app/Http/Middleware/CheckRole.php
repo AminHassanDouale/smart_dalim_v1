@@ -5,6 +5,9 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Models\ParentProfile;
+use App\Models\TeacherProfile;
+use App\Models\ClientProfile;
 
 class CheckRole
 {
@@ -34,23 +37,42 @@ class CheckRole
                     ->with('error', 'You do not have permission to access that page.');
             }
 
+            if ($user->role === 'client') {
+                return redirect()->route('clients.dashboard')
+                    ->with('error', 'You do not have permission to access that page.');
+            }
+
             return redirect()->route('login');
         }
 
         // Skip profile check for profile setup routes
-        if ($request->routeIs('*.profile-setup')) {
+        if ($request->routeIs('*.profile-setup*')) {
             return $next($request);
         }
 
         // Check if profile exists based on role
-        if ($role === 'parent' && !$user->parentProfile()->exists()) {
-            return redirect()->route('parents.profile-setup')
-                ->with('warning', 'Please complete your profile first.');
+        if ($role === 'parent') {
+            $hasProfile = ParentProfile::where('user_id', $user->id)->exists();
+            if (!$hasProfile) {
+                return redirect()->route('parents.profile-setup')
+                    ->with('warning', 'Please complete your profile first.');
+            }
         }
 
-        if ($role === 'teacher' && !$user->teacherProfile()->exists()) {
-            return redirect()->route('teachers.profile-setup')
-                ->with('warning', 'Please complete your profile first.');
+        if ($role === 'teacher') {
+            $hasProfile = TeacherProfile::where('user_id', $user->id)->exists();
+            if (!$hasProfile) {
+                return redirect()->route('teachers.profile-setup')
+                    ->with('warning', 'Please complete your profile first.');
+            }
+        }
+
+        if ($role === 'client') {
+            $hasProfile = ClientProfile::where('user_id', $user->id)->exists();
+            if (!$hasProfile) {
+                return redirect()->route('clients.profile-setup')
+                    ->with('warning', 'Please complete your profile first.');
+            }
         }
 
         return $next($request);

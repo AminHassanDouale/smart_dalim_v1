@@ -12,33 +12,55 @@ class SubjectSeeder extends Seeder
     {
         $subjects = [
             [
-                'name' => 'Quran',
-                'description' => 'Study of the Holy Quran, including memorization and recitation',
+                'name' => 'Mathematics',
+                'description' => 'Study of numbers, quantities, and shapes',
             ],
             [
-                'name' => 'Tajwid',
-                'description' => 'Rules governing pronunciation during recitation of the Quran',
+                'name' => 'Physics',
+                'description' => 'Science of matter, energy, and their interactions',
             ],
             [
-                'name' => 'Tafsir',
-                'description' => 'Exegesis or interpretation of the Holy Quran',
+                'name' => 'Chemistry',
+                'description' => 'Study of substances, their properties, and reactions',
             ],
             [
-                'name' => 'Islamic Studies',
-                'description' => 'Comprehensive study of Islamic principles, ethics, and practices',
+                'name' => 'Biology',
+                'description' => 'Study of living organisms and their vital processes',
             ],
             [
-                'name' => 'Ilm Hadith',
-                'description' => 'Study of Prophetic traditions and narrations',
+                'name' => 'English Language',
+                'description' => 'Study of English grammar, vocabulary, and communication',
             ],
+            [
+                'name' => 'History',
+                'description' => 'Study of past events and human civilization',
+            ],
+            [
+                'name' => 'Geography',
+                'description' => 'Study of Earth and human interaction with environment',
+            ],
+            [
+                'name' => 'Computer Science',
+                'description' => 'Study of computers and computational systems',
+            ],
+            [
+                'name' => 'Art',
+                'description' => 'Study of various forms of creative expression',
+            ],
+            [
+                'name' => 'Music',
+                'description' => 'Study of musical theory and performance',
+            ]
         ];
 
         foreach ($subjects as $subject) {
             Subject::create([
                 'name' => $subject['name'],
                 'slug' => Str::slug($subject['name']),
-                'description' => $subject['description'],
+                'description' => $subject['description']
             ]);
         }
+
+        $this->command->info('Subjects seeded successfully!');
     }
 }

@@ -11,8 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Contracts\Auth\CanResetPassword;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
-class User extends Authenticatable implements CanResetPassword
-{
+class User extends Authenticatable implements CanResetPassword {
     use HasApiTokens, HasFactory, Notifiable;
 
     /**
@@ -20,6 +19,7 @@ class User extends Authenticatable implements CanResetPassword
      */
     public const ROLE_PARENT = 'parent';
     public const ROLE_TEACHER = 'teacher';
+    public const ROLE_CLIENT = 'client'; // Add client role
 
     protected $fillable = [
         'name',
@@ -64,9 +64,12 @@ class User extends Authenticatable implements CanResetPassword
     }
 
     /**
-     * Check if user has completed their profile
+     * Get the client profile associated with the user.
      */
-
+    public function clientProfile(): HasOne
+    {
+        return $this->hasOne(ClientProfile::class);
+    }
 
     /**
      * Get the dashboard route for the user based on their role
@@ -81,6 +84,10 @@ class User extends Authenticatable implements CanResetPassword
             return 'teachers.dashboard';
         }
 
+        if ($this->role === self::ROLE_CLIENT) {
+            return 'clients.dashboard';
+        }
+
         return 'login';
     }
 
@@ -90,11 +97,15 @@ class User extends Authenticatable implements CanResetPassword
     public function getProfileSetupRoute(): string
     {
         if ($this->role === self::ROLE_PARENT) {
-            return 'parents.profile-setup.steps'; // Updated to match new component structure
+            return 'parents.profile-setup.steps';
         }
 
         if ($this->role === self::ROLE_TEACHER) {
             return 'teachers.profile-setup';
+        }
+
+        if ($this->role === self::ROLE_CLIENT) {
+            return 'clients.profile-setup';
         }
 
         return 'login';
@@ -110,11 +121,14 @@ class User extends Authenticatable implements CanResetPassword
             return $this->teacherProfile()->exists();
         }
 
+        if ($this->role === self::ROLE_CLIENT) {
+            return $this->clientProfile?->has_completed_profile;
+        }
+
         return false;
     }
-public function subjects(): BelongsToMany
-{
-    return $this->belongsToMany(Subject::class, 'user_subjects');
-}
 
+    public function subjects(): BelongsToMany {
+        return $this->belongsToMany(Subject::class, 'user_subjects');
+    }
 }

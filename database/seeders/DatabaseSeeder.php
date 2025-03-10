@@ -9,11 +9,24 @@ use App\Models\LearningSession;
 use App\Models\Children;
 use App\Models\ParentProfile;
 use App\Models\TeacherProfile;
+use App\Models\ClientProfile;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
+    {
+         // Run standard education seeding first
+         $this->seedStandardEducation();
+
+         // Run Islamic Studies seeder
+         $this->call(IslamicStudiesSeeder::class);
+    }
+
+    /**
+     * Seed standard education data
+     */
+    private function seedStandardEducation(): void
     {
         // Create Subjects
         $subjects = collect(['Mathematics', 'Physics', 'Chemistry', 'Biology', 'English'])
@@ -47,6 +60,46 @@ class DatabaseSeeder extends Seeder
 
             Children::factory(rand(1, 3))->create([
                 'parent_profile_id' => $parentProfile->id
+            ]);
+        }
+
+        // Create Clients with Profiles
+        for ($i = 0; $i < 10; $i++) {
+            // Create client user
+            $client = User::factory()->create([
+                'role' => User::ROLE_CLIENT,
+                'name' => fake()->company() . ' Rep',
+                'email' => 'client' . ($i + 1) . '@example.com',
+            ]);
+
+            // Random services array
+            $services = collect(['consulting', 'development', 'training', 'support'])
+                ->random(rand(1, 4))
+                ->values()
+                ->toArray();
+
+            // Create client profile
+            ClientProfile::create([
+                'user_id' => $client->id,
+                'company_name' => fake()->company(),
+                'whatsapp' => fake()->phoneNumber(),
+                'phone' => fake()->phoneNumber(),
+                'website' => fake()->url(),
+                'position' => fake()->jobTitle(),
+                'address' => fake()->streetAddress(),
+                'city' => fake()->city(),
+                'country' => fake()->country(),
+                'industry' => fake()->randomElement(['Technology', 'Education', 'Healthcare', 'Finance', 'Manufacturing']),
+                'company_size' => fake()->randomElement(['1-10', '11-50', '51-200', '201-500', '501+']),
+                'preferred_services' => $services,
+                'preferred_contact_method' => fake()->randomElement(['email', 'phone', 'whatsapp']),
+                'notes' => fake()->paragraph(),
+                'has_completed_profile' => fake()->boolean(80),
+                'status' => fake()->randomElement([
+                    ClientProfile::STATUS_PENDING,
+                    ClientProfile::STATUS_APPROVED,
+                    ClientProfile::STATUS_REJECTED,
+                ]),
             ]);
         }
 

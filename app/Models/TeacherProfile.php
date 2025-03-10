@@ -53,4 +53,8 @@ class TeacherProfile extends Model
     {
         return $this->belongsToMany(Subject::class, 'subject_teacher', 'teacher_profile_id', 'subject_id');
     }
+    public function materials()
+{
+    return $this->hasMany(Material::class);
+}
 }

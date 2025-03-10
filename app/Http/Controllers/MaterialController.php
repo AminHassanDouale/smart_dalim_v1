@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\TeacherProfile;
-use App\Http\Requests\StoreTeacherProfileRequest;
-use App\Http\Requests\UpdateTeacherProfileRequest;
+use App\Models\Material;
+use App\Http\Requests\StoreMaterialRequest;
+use App\Http\Requests\UpdateMaterialRequest;
 
-class TeacherProfileController extends Controller
+class MaterialController extends Controller
 {
     /**
      * Display a listing of the resource.
@@ -27,7 +27,7 @@ class TeacherProfileController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreTeacherProfileRequest $request)
+    public function store(StoreMaterialRequest $request)
     {
         //
     }
@@ -35,7 +35,7 @@ class TeacherProfileController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(TeacherProfile $teacherProfile)
+    public function show(Material $material)
     {
         //
     }
@@ -43,7 +43,7 @@ class TeacherProfileController extends Controller
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(TeacherProfile $teacherProfile)
+    public function edit(Material $material)
     {
         //
     }
@@ -51,7 +51,7 @@ class TeacherProfileController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UpdateTeacherProfileRequest $request, TeacherProfile $teacherProfile)
+    public function update(UpdateMaterialRequest $request, Material $material)
     {
         //
     }
@@ -59,7 +59,7 @@ class TeacherProfileController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(TeacherProfile $teacherProfile)
+    public function destroy(Material $material)
     {
         //
     }

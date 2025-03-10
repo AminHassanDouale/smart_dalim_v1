@@ -23,27 +23,36 @@ class extends Component
 
         if (Auth::attempt($credentials, $this->remember)) {
             session()->regenerate();
-
-            // Get the authenticated user
             $user = Auth::user();
 
-            // Redirect based on role
             if ($user->role === 'parent') {
-                // Check if parent profile is completed
-                if ($user->parentProfile && $user->parentProfile->has_completed_profile) {
+                if (!$user->parentProfile || !$user->parentProfile->has_completed_profile) {
                     $this->redirect('/parents/profile-setup', navigate: true);
                 } else {
                     $this->redirect('/parents/dashboard', navigate: true);
                 }
                 return;
-            } elseif ($user->role === 'teacher') {
-                $this->redirect('/teachers/dashboard', navigate: true);
-                return;
-            } else {
-                // Default redirect for other roles or if no role is set
-                $this->redirect('/home', navigate: true);
+            }
+
+            if ($user->role === 'teacher') {
+                if (!$user->teacherProfile || $user->teacherProfile->status !== 'verified') {
+                    $this->redirect('/teachers/profile-setup', navigate: true);
+                } else {
+                    $this->redirect('/teachers/dashboard', navigate: true);
+                }
                 return;
             }
+
+            if ($user->role === 'client') {
+                if (!$user->clientProfile || !$user->clientProfile->has_completed_profile) {
+                    $this->redirect('/clients/profile-setup', navigate: true);
+                } else {
+                    $this->redirect('/clients/dashboard', navigate: true);
+                }
+                return;
+            }
+
+            $this->redirect('/home', navigate: true);
         }
 
         $this->addError('email', __('auth.failed'));

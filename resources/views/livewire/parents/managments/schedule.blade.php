@@ -1,391 +1,264 @@
 <?php
-use Livewire\Volt\Component;
-use App\Models\{TeacherProfile, Schedule, Course, Children, ParentProfile};
+namespace App\Livewire;
+
+use App\Models\LearningSession;
+use App\Models\Subject;
+use App\Models\User;
+use App\Models\Children;
+use Carbon\Carbon;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Livewire\Attributes\Computed;
 use Livewire\WithPagination;
-use Illuminate\Support\Facades\Auth;
-use Mary\Traits\Toast;
+use Livewire\Volt\Component;
 
 new class extends Component {
-    use WithPagination, Toast;
+    use WithPagination;
 
-    public $children = [];
-    public $childrenData = [];
-    public $teachers = [];
-    public $classes = [];
-    public $schedules = [];
-    public $showCreateModal = false;
-    public $searchTerm = '';
-    public $filterDay = '';
 
-    public $newSchedule = [
-        'student_id' => '',
-        'teacher_id' => '',
-        'class_id' => '',
-        'day' => '',
-        'start_time' => '',
-        'end_time' => '',
+    public $showFilters = false;
+    public $selectedChild = null;
+    public $filters = [
+        'status' => '',
+        'subject' => '',
+        'teacher' => '',
+        'attended' => ''
     ];
 
-    public function mount()
+    public array $sort = [
+        'field' => 'start_time',
+        'direction' => 'desc'
+    ];
+
+    #[Computed]
+    public function headers(): array
     {
-        if (!Auth::check() || !Auth::user()->hasRole('parent')) {
-            redirect()->route('login');
-        }
-
-        $parentProfile = ParentProfile::where('user_id', Auth::id())->first();
-        if (!$parentProfile) {
-            redirect()->route('parents.profile-setup');
-        }
-
-        $children = Children::with(['teacher', 'subjects'])
-            ->where('parent_profile_id', $parentProfile->id)
-            ->get();
-
-        foreach ($children as $child) {
-            $this->children[$child->id] = $child->name;
-
-            $times = is_string($child->available_times) ?
-                json_decode($child->available_times, true) :
-                $child->available_times;
-
-            $this->childrenData[$child->id] = [
-                'name' => $child->name,
-                'available_times' => $times ?? [],
-                'teacher_name' => $child->teacher?->name,
-                'subjects' => $child->subjects->pluck('name')->toArray()
-            ];
-        }
-
-        $teacherRecords = TeacherProfile::with(['user'])
-            ->where('status', TeacherProfile::STATUS_VERIFIED)
-            ->get();
-        foreach ($teacherRecords as $teacher) {
-            $this->teachers[$teacher->id] = $teacher->user->name;
-        }
-
-        $courseRecords = Course::where('status', 'active')->get();
-        foreach ($courseRecords as $course) {
-            $this->classes[$course->id] = $course->name;
-        }
-
-        if (empty($this->children)) {
-            $this->toast()->warning('Please add your children first');
-            redirect()->route('parents.profile-setup');
-        }
-
-        $this->loadSchedules();
-    }
-
-    public function loadSchedules()
-    {
-        $query = Schedule::with(['student', 'teacher.user', 'class'])
-            ->whereIn('student_id', array_keys($this->children));
-
-        if ($this->searchTerm) {
-            $query->where(function($q) {
-                $q->whereHas('student', fn($sq) => $sq->where('name', 'like', "%{$this->searchTerm}%"))
-                  ->orWhereHas('teacher.user', fn($sq) => $sq->where('name', 'like', "%{$this->searchTerm}%"))
-                  ->orWhereHas('class', fn($sq) => $sq->where('name', 'like', "%{$this->searchTerm}%"));
-            });
-        }
-
-        if ($this->filterDay) {
-            $query->where('day', $this->filterDay);
-        }
-
-        $this->schedules = $query->orderBy('day')
-                                ->orderBy('start_time')
-                                ->get();
-    }
-
-    private function hasScheduleConflict()
-    {
-        return Schedule::where('student_id', $this->newSchedule['student_id'])
-            ->where('day', $this->newSchedule['day'])
-            ->where(function ($query) {
-                $query->whereBetween('start_time', [
-                        $this->newSchedule['start_time'],
-                        $this->newSchedule['end_time']
-                    ])
-                    ->orWhereBetween('end_time', [
-                        $this->newSchedule['start_time'],
-                        $this->newSchedule['end_time']
-                    ]);
-            })->exists();
-    }
-
-    private function isTimeAvailable($childId, $day, $time)
-    {
-        if (!isset($this->childrenData[$childId]['available_times'][$day])) {
-            return false;
-        }
-
-        $times = $this->childrenData[$childId]['available_times'][$day];
-        if (!is_array($times)) return false;
-
-        foreach ($times as $period) {
-            if (isset($period['start'], $period['end'])) {
-                if ($time >= $period['start'] && $time <= $period['end']) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    public function createSchedule()
-    {
-        $this->validate([
-            'newSchedule.student_id' => [
-                'required',
-                'exists:children,id',
-                function ($attribute, $value, $fail) {
-                    if (!isset($this->children[$value])) {
-                        $this->toast()->error('Invalid child selected');
-                        $fail('Unauthorized child selection');
-                    }
-                },
+        return [
+            [
+                'key' => 'subject',
+                'label' => 'Subject',
+                'sort' => 'subject_name',
             ],
-            'newSchedule.teacher_id' => 'required|exists:teacher_profiles,id',
-            'newSchedule.class_id' => 'required|exists:courses,id',
-            'newSchedule.day' => 'required|in:monday,tuesday,wednesday,thursday,friday,saturday,sunday',
-            'newSchedule.start_time' => [
-                'required',
-                function ($attribute, $value, $fail) {
-                    if (!$this->isTimeAvailable(
-                        $this->newSchedule['student_id'],
-                        $this->newSchedule['day'],
-                        $value
-                    )) {
-                        $fail('Selected time is not within available hours');
-                    }
-                }
+            [
+                'key' => 'teacher',
+                'label' => 'Teacher',
+                'sort' => 'teacher_name',
             ],
-            'newSchedule.end_time' => 'required|after:newSchedule.start_time',
-        ]);
-
-        if ($this->hasScheduleConflict()) {
-            $this->toast()->error('Time slot conflicts with existing schedule');
-            return;
-        }
-
-        Schedule::create($this->newSchedule);
-        $this->reset('newSchedule', 'showCreateModal');
-        $this->loadSchedules();
-        $this->toast()->success('Schedule created successfully');
+            [
+                'key' => 'start_time',
+                'label' => 'Start Time',
+                'sort' => 'start_time'
+            ],
+            [
+                'key' => 'duration',
+                'label' => 'Duration',
+            ],
+            [
+                'key' => 'status',
+                'label' => 'Status',
+                'sort' => 'status'
+            ],
+            [
+                'key' => 'attended',
+                'label' => 'Attendance',
+                'sort' => 'attended'
+            ]
+        ];
     }
 
-    public function deleteSchedule($scheduleId)
+    #[Computed]
+    public function sessions(): LengthAwarePaginator
     {
-        $schedule = Schedule::findOrFail($scheduleId);
-        if (!isset($this->children[$schedule->student_id])) {
-            $this->toast()->error('Unauthorized action');
-            return;
-        }
-
-        $schedule->delete();
-        $this->loadSchedules();
-        $this->toast()->success('Schedule removed successfully');
+        return LearningSession::query()
+            ->when($this->selectedChild, fn($query) => $query->where('children_id', $this->selectedChild))
+            ->when(!$this->selectedChild, fn($query) => $query->whereIn('children_id', auth()->user()->parentProfile->children->pluck('id')))
+            ->when($this->filters['status'], fn($query, $status) => $query->where('status', $status))
+            ->when($this->filters['subject'], fn($query, $subject) => $query->whereHas('subject', fn($q) => $q->where('id', $subject)))
+            ->when($this->filters['teacher'], fn($query, $teacher) => $query->whereHas('teacher', fn($q) => $q->where('id', $teacher)))
+            ->when($this->filters['attended'] !== '', fn($query) => $query->where('attended', $this->filters['attended']))
+            ->select('learning_sessions.*')
+            ->selectRaw('(SELECT name FROM subjects WHERE id = learning_sessions.subject_id) as subject_name')
+            ->selectRaw('(SELECT name FROM users WHERE id = learning_sessions.teacher_id) as teacher_name')
+            ->orderBy($this->sort['field'], $this->sort['direction'])
+            ->paginate(10)
+            ->through(fn($session) => [
+                'id' => $session->id,
+                'subject' => $session->subject_name,
+                'teacher' => $session->teacher_name,
+                'start_time' => $session->start_time,
+                'duration' => $session->end_time ? Carbon::parse($session->start_time)->diffInHours(Carbon::parse($session->end_time)) : null,
+                'status' => $session->status,
+                'attended' => $session->attended
+            ]);
     }
-}; ?>
+
+
+    #[Computed]
+    public function children()
+    {
+        return Children::where('parent_profile_id', auth()->user()->parentProfile->id)
+            ->get()
+            ->map(fn($child) => [
+                'id' => $child->id,
+                'name' => $child->name
+            ]);
+    }
+
+    public function resetFilters(): void
+    {
+        $this->reset(['filters', 'selectedChild']);
+    }
+
+    public function with(): array
+    {
+        return [
+            'statuses' => [
+                ['id' => 'scheduled', 'name' => 'Scheduled'],
+                ['id' => 'completed', 'name' => 'Completed'],
+                ['id' => 'cancelled', 'name' => 'Cancelled'],
+            ],
+            'subjects' => Subject::select('id', 'name')->get()
+                ->map(fn($subject) => ['id' => $subject->id, 'name' => $subject->name]),
+            'teachers' => User::where('role', User::ROLE_TEACHER)
+                ->select('id', 'name')
+                ->get()
+                ->map(fn($teacher) => ['id' => $teacher->id, 'name' => $teacher->name]),
+        ];
+    }
+}
+?>
+
 <div>
-    <x-header title="Learning Schedule Management" separator>
+    <x-header title="Schedule Management" separator>
         <x-slot:actions>
-            <div class="flex gap-4">
-                <x-input
-                    wire:model.live="searchTerm"
-                    placeholder="Search schedules..."
-                    icon="c-magnifying-glass"
-                    class="w-64"
-                />
-                <x-select
-                    wire:model.live="filterDay"
-                    :options="[
-                        '' => 'All Days',
-                        'monday' => 'Monday',
-                        'tuesday' => 'Tuesday',
-                        'wednesday' => 'Wednesday',
-                        'thursday' => 'Thursday',
-                        'friday' => 'Friday',
-                        'saturday' => 'Saturday',
-                        'sunday' => 'Sunday'
-                    ]"
-                    class="w-40"
-                />
-                <x-button wire:click="$toggle('showCreateModal')" icon="s-plus-circle" color="primary">
-                    Create Schedule
-                </x-button>
-            </div>
+            <x-select
+                label="Select Child"
+                :options="$this->children"
+                wire:model.live="selectedChild"
+                placeholder="All Children"
+                class="w-48"
+            />
+
+
+            <x-button
+                icon="o-funnel"
+                class="ml-2"
+                wire:click="$toggle('showFilters')"
+            >
+                Filters
+            </x-button>
         </x-slot:actions>
     </x-header>
 
-    <div class="p-4 space-y-6">
-        <x-card title="Student Information" class="bg-white">
-            <div class="space-y-4">
-                @foreach($childrenData as $childId => $child)
-                    <div class="p-4 transition border rounded-lg hover:shadow-md">
-                        <div class="flex items-center justify-between mb-4">
-                            <div>
-                                <h3 class="text-xl font-bold text-gray-900">{{ $child['name'] }}</h3>
-                                <p class="mt-1 text-sm text-gray-600">
-                                    <span class="font-medium">Assigned Teacher:</span>
-                                    {{ $child['teacher_name'] ?? 'Not Assigned' }}
-                                </p>
-                            </div>
-                        </div>
+    <!-- Filter Drawer -->
+    <x-drawer wire:model="showFilters" title="Filters">
+        <div class="space-y-6 p-4">
+            <x-select
+                label="Status"
+                :options="$statuses"
+                wire:model.live="filters.status"
+            />
 
-                        <div class="mb-4">
-                            <h4 class="mb-2 text-lg font-semibold text-gray-800">Enrolled Subjects</h4>
-                            <div class="flex flex-wrap gap-2">
-                                @foreach($child['subjects'] ?? [] as $subject)
-                                    <x-badge color="success">{{ $subject }}</x-badge>
-                                @endforeach
-                            </div>
-                        </div>
+            <x-select
+                label="Subject"
+                :options="$subjects"
+                wire:model.live="filters.subject"
+            />
 
-                        <div>
-                            <h4 class="mb-2 text-lg font-semibold text-gray-800">Available Times</h4>
-                            <div class="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
-                                @if(isset($child['available_times']) && is_array($child['available_times']))
-                                    @foreach($child['available_times'] as $day => $times)
-                                        @if(is_array($times) && !empty($times))
-                                            <div class="p-2 border rounded hover:bg-gray-50">
-                                                <div class="font-medium text-indigo-600">{{ ucfirst($day) }}</div>
-                                                @foreach($times as $time)
-                                                    @if(isset($time['start']) && isset($time['end']))
-                                                        <div class="text-sm text-gray-600">
-                                                            {{ date('H:i', strtotime($time['start'])) }} -
-                                                            {{ date('H:i', strtotime($time['end'])) }}
-                                                        </div>
-                                                    @endif
-                                                @endforeach
-                                            </div>
-                                        @endif
-                                    @endforeach
-                                @endif
-                            </div>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-        </x-card>
+            <x-select
+                label="Teacher"
+                :options="$teachers"
+                wire:model.live="filters.teacher"
+            />
 
-        <x-card title="Current Learning Schedules" class="bg-white">
-            <div class="overflow-x-auto">
-                <table class="w-full">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="p-4 font-bold text-left text-gray-900">Student</th>
-                            <th class="p-4 font-bold text-left text-gray-900">Teacher</th>
-                            <th class="p-4 font-bold text-left text-gray-900">Subject</th>
-                            <th class="p-4 font-bold text-left text-gray-900">Day</th>
-                            <th class="p-4 font-bold text-left text-gray-900">Time Slot</th>
-                            <th class="p-4 font-bold text-left text-gray-900">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-200">
-                        @forelse($schedules as $schedule)
-                            <tr class="hover:bg-gray-50">
-                                <td class="p-4">
-                                    <x-badge>{{ $schedule->student->name }}</x-badge>
-                                </td>
-                                <td class="p-4">{{ $schedule->teacher->user->name }}</td>
-                                <td class="p-4">{{ $schedule->class->name }}</td>
-                                <td class="p-4">
-                                    <x-badge color="info">{{ ucfirst($schedule->day) }}</x-badge>
-                                </td>
-                                <td class="p-4">
-                                    {{ date('H:i', strtotime($schedule->start_time)) }} -
-                                    {{ date('H:i', strtotime($schedule->end_time)) }}
-                                </td>
-                                <td class="p-4">
-                                    <x-button
-                                        wire:click="deleteSchedule({{ $schedule->id }})"
-                                        wire:confirm="Are you sure you want to delete this schedule?"
-                                        color="red"
-                                        icon="trash"
-                                    />
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="6" class="p-4 text-center text-gray-500">
-                                    No schedules found
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </x-card>
+            <x-select
+                label="Attendance"
+                :options="[
+                    ['id' => '1', 'name' => 'Attended'],
+                    ['id' => '0', 'name' => 'Not Attended']
+                ]"
+                wire:model.live="filters.attended"
+            />
+
+            <x-button
+                wire:click="resetFilters"
+                class="w-full"
+                variant="secondary"
+            >
+                Reset Filters
+            </x-button>
+        </div>
+    </x-drawer>
+
+    <div class="bg-white rounded-lg shadow">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        @foreach($this->headers as $header)
+                            <th scope="col"
+                                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                                wire:click="$set('sort', ['field' => '{{ $header['sort'] ?? $header['key'] }}', 'direction' => '{{ $sort['direction'] === 'asc' ? 'desc' : 'asc' }}'])">
+                                <div class="flex items-center space-x-1">
+                                    <span>{{ $header['label'] }}</span>
+                                    @if(isset($header['sort']))
+                                        <span class="text-gray-400">
+                                            @if($sort['field'] === ($header['sort'] ?? $header['key']))
+                                                {!! $sort['direction'] === 'asc' ? '↑' : '↓' !!}
+                                            @endif
+                                        </span>
+                                    @endif
+                                </div>
+                            </th>
+                        @endforeach
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    @forelse($this->sessions as $session)
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                {{ $session['subject'] ?? '-' }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
+                                {{ $session['teacher'] ?? '-' }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-500">
+                            {{ Carbon::parse($session['start_time'])->format('M d, Y H:i') }}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-500">
+                            {{ $session['duration'] }} hours
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                                {{ $session['status'] === 'completed' ? 'bg-green-100 text-green-800' :
+                                   ($session['status'] === 'cancelled' ? 'bg-red-100 text-red-800' :
+                                   'bg-yellow-100 text-yellow-800') }}">
+                                {{ ucfirst($session['status']) }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                                {{ $session['attended'] ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                {{ $session['attended'] ? 'Attended' : 'Not Attended' }}
+                            </span>
+                        </td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="{{ count($this->headers) }}" class="px-6 py-4 text-center text-gray-500">
+                            No sessions found
+                        </td>
+                    </tr>
+                @endforelse
+                </tbody>
+            </table>
+        </div>
+
+        <div class="px-4 py-3 border-t border-gray-200">
+            {{ $this->sessions->links() }}        </div>
     </div>
 
-    <x-modal wire:model="showCreateModal">
-        <x-card title="Create New Schedule">
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                    <x-select
-                        label="Child"
-                        wire:model="newSchedule.student_id"
-                        :options="$children"
-                        placeholder="Select Child"
-                    />
-                </div>
-                <div>
-                    <x-select
-                        label="Teacher"
-                        wire:model="newSchedule.teacher_id"
-                        :options="$teachers"
-                        placeholder="Select Teacher"
-                    />
-                </div>
-                <div>
-                    <x-select
-                        label="Class"
-                        wire:model="newSchedule.class_id"
-                        :options="$classes"
-                        placeholder="Select Class"
-                    />
-                </div>
-                <div>
-                    <x-select
-                        label="Day"
-                        wire:model="newSchedule.day"
-                        :options="[
-                            'monday' => 'Monday',
-                            'tuesday' => 'Tuesday',
-                            'wednesday' => 'Wednesday',
-                            'thursday' => 'Thursday',
-                            'friday' => 'Friday',
-                            'saturday' => 'Saturday',
-                            'sunday' => 'Sunday'
-                        ]"
-                        placeholder="Select Day"
-                    />
-                </div>
-                <div>
-                    <x-datetime
-                        label="Start Time"
-                        wire:model="newSchedule.start_time"
-                        icon="o-calendar"
-                        type="time"
-                    />
-                </div>
-                <div>
-                    <x-datetime
-                        label="End Time"
-                        wire:model="newSchedule.end_time"
-                        icon="o-calendar"
-                        type="time"
-                    />
-                </div>
-            </div>
-            <x-slot:footer>
-                <div class="flex justify-end gap-4">
-                    <x-button wire:click="$toggle('showCreateModal')">Cancel</x-button>
-                    <x-button wire:click="createSchedule" color="primary">Create</x-button>
-                </div>
-            </x-slot:footer>
-        </x-card>
-    </x-modal>
 </div>

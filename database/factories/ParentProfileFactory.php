@@ -3,7 +3,6 @@
 namespace Database\Factories;
 
 use App\Models\ParentProfile;
-use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class ParentProfileFactory extends Factory
@@ -13,18 +12,24 @@ class ParentProfileFactory extends Factory
     public function definition(): array
     {
         return [
-            'phone_number' => fake()->phoneNumber(),
-            'address' => fake()->address(),
-            'number_of_children' => fake()->numberBetween(1, 4),
-            'additional_information' => fake()->paragraph(),
+            'phone_number' => $this->faker->phoneNumber(),
+            'address' => $this->faker->address(),
+            'number_of_children' => $this->faker->numberBetween(1, 5),
+            'additional_information' => $this->faker->optional(0.7)->paragraph(),
+            'profile_photo_path' => $this->faker->optional(0.3)->imageUrl(),
             'emergency_contacts' => [
                 [
-                    'name' => fake()->name(),
-                    'relation' => 'Spouse',
-                    'phone' => fake()->phoneNumber(),
+                    'name' => $this->faker->name(),
+                    'relationship' => $this->faker->randomElement(['Spouse', 'Grandparent', 'Sibling', 'Uncle', 'Aunt']),
+                    'phone' => $this->faker->phoneNumber(),
+                ],
+                [
+                    'name' => $this->faker->name(),
+                    'relationship' => $this->faker->randomElement(['Spouse', 'Grandparent', 'Sibling', 'Uncle', 'Aunt']),
+                    'phone' => $this->faker->phoneNumber(),
                 ],
             ],
-            'has_completed_profile' => true,
+            'has_completed_profile' => $this->faker->boolean(80),
         ];
     }
 }

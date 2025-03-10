@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('whatsapp');
             $table->string('phone');
             $table->string('fix_number')->nullable();
-            $table->string('photo');
+            $table->string('photo')->nullable();
             $table->date('date_of_birth');
             $table->string('place_of_birth');
             $table->timestamps();

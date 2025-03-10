@@ -80,7 +80,7 @@ new class extends Component {
                 DB::raw('AVG(performance_score) as avg_score')
             ])
             ->groupBy('children_id')
-            ->with('child')
+            ->with('children')
             ->get();
 
         $this->studentStats = $stats->map(function($stat) {
@@ -90,7 +90,7 @@ new class extends Component {
 
             return [
                 'id' => $stat->children_id,
-                'name' => $stat->child->name,
+                'name' => $stat->children->name,
                 'attendance_rate' => $attendanceRate,
                 'score' => round($stat->avg_score ?? 0),
                 'total_sessions' => $stat->total_sessions,
@@ -170,7 +170,7 @@ new class extends Component {
                 DB::raw('AVG(performance_score) as avg_score')
             ])
             ->groupBy('children_id')
-            ->with('child')
+            ->with('children')
             ->get();
 
         $this->studentStats = $stats->map(function($stat) {
@@ -180,7 +180,7 @@ new class extends Component {
 
             return [
                 'id' => $stat->children_id,
-                'name' => $stat->child->name,
+                'name' => $stat->children->name,
                 'attendance_rate' => $attendanceRate,
                 'score' => round($stat->avg_score ?? 0),
                 'total_sessions' => $stat->total_sessions,
