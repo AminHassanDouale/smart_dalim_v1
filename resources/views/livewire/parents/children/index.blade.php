@@ -33,21 +33,32 @@ new class extends Component {
     public function loadChildren()
     {
         if ($this->parentProfile) {
-            // In a real app, you would apply filters here
-            $this->children = $this->parentProfile->children;
+            $query = $this->parentProfile->children()
+                ->when($this->searchQuery, function ($query) {
+                    $query->where('name', 'like', '%' . $this->searchQuery . '%');
+                })
+                ->when($this->subjectFilter, function ($query) {
+                    $query->whereHas('subjects', function ($q) {
+                        $q->where('id', $this->subjectFilter);
+                    });
+                })
+                ->when($this->teacherFilter, function ($query) {
+                    $query->where('teacher_id', $this->teacherFilter);
+                });
+    
+            $this->children = $query->get();
         }
     }
 
     public function calculateStats()
-    {
-        // In a real app, these would be calculated from database queries
-        $this->stats = [
-            'total_children' => $this->children->count(),
-            'total_sessions' => rand(15, 50),
-            'total_subjects' => rand(4, 10),
-            'total_teachers' => rand(2, 8)
-        ];
-    }
+{
+    $this->stats = [
+        'total_children' => $this->children->count(),
+        'total_sessions' => $this->parentProfile->children->sum('learningSessions.count'),
+        'total_subjects' => $this->parentProfile->children->flatMap->subjects->unique('id')->count(),
+        'total_teachers' => $this->parentProfile->children->pluck('teacher_id')->unique()->count(),
+    ];
+}
 
     public function confirmDelete($childId)
     {
@@ -57,15 +68,18 @@ new class extends Component {
 
     public function deleteChild()
     {
-        // In a real app, you would actually delete the child here
-
+        $this->validate([
+            'childToDelete' => 'required|exists:children,id',
+        ]);
+    
+        Children::find($this->childToDelete)->delete();
+    
         $this->showDeleteModal = false;
         $this->childToDelete = null;
-
+    
         $this->loadChildren();
         $this->calculateStats();
-
-        // Show success message
+    
         session()->flash('success', 'Child has been removed successfully.');
     }
 
@@ -235,7 +249,7 @@ new class extends Component {
                                     </div>
                                     <div class="flex items-center gap-2">
                                         <x-icon name="o-calendar" class="w-4 h-4 opacity-70" />
-                                        <span>Last session: {{ $formatDate($child->last_session_at ?? now()->subDays(rand(1, 14))) }}</span>
+                                        <span>Last session: {{ $this->formatDate($child->last_session_at ?? now()->subDays(rand(1, 14))) }}</span>
                                     </div>
                                 </div>
 

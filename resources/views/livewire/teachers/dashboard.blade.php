@@ -8,6 +8,7 @@ use App\Models\Course;
 use App\Models\LearningSession;
 use App\Models\Children;
 use App\Models\User;
+use App\Models\Subject;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
@@ -35,152 +36,132 @@ new class extends Component {
 
     protected function calculateStats()
     {
-        // In a real app, these would fetch from database
-        // For demonstration, we'll use placeholder values
-        $this->stats = [
-            'total_students' => rand(5, 20),
-            'total_sessions' => rand(20, 50),
-            'upcoming_sessions' => rand(3, 8),
-            'completed_sessions' => rand(15, 40),
-            'total_courses' => rand(2, 5),
-            'session_requests' => rand(0, 3)
-        ];
+        // Get real stats from the database
+        try {
+            // Count unique children assigned to this teacher's sessions
+            $totalStudents = Children::whereHas('learningSessions', function($query) {
+                $query->where('teacher_id', $this->user->id);
+            })->count();
+
+            // Count all sessions for this teacher
+            $totalSessions = LearningSession::where('teacher_id', $this->user->id)->count();
+
+            // Count upcoming sessions
+            $upcomingSessions = LearningSession::where('teacher_id', $this->user->id)
+                ->where('start_time', '>', now())
+                ->where('status', LearningSession::STATUS_SCHEDULED)
+                ->count();
+
+            // Count completed sessions
+            $completedSessions = LearningSession::where('teacher_id', $this->user->id)
+                ->where('status', LearningSession::STATUS_COMPLETED)
+                ->count();
+
+            // Count active courses
+            $totalCourses = Course::where('teacher_profile_id', $this->teacherProfile->id)
+                ->where('status', 'active')
+                ->count();
+
+            $this->stats = [
+                'total_students' => $totalStudents,
+                'total_sessions' => $totalSessions,
+                'upcoming_sessions' => $upcomingSessions,
+                'completed_sessions' => $completedSessions,
+                'total_courses' => $totalCourses,
+                'session_requests' => 0 // You can implement this if you have a session_requests feature
+            ];
+        } catch (\Exception $e) {
+            // In case of error, leave default values as 0
+            // You could add logging here if needed
+        }
     }
 
-    // Get upcoming sessions for the teacher
+    // Get upcoming sessions for the teacher (real data)
     public function getUpcomingSessionsProperty()
     {
-        // In a real app, you would fetch from the database
-        // For now, returning mock data
-        return [
-            [
-                'id' => 1,
-                'title' => 'Advanced Laravel Middleware',
-                'student_name' => 'Alex Johnson',
-                'student_id' => 201,
-                'date' => Carbon::now()->addDays(1)->format('Y-m-d'),
-                'time' => '10:00:00',
-                'end_time' => '12:00:00',
-                'status' => 'confirmed'
-            ],
-            [
-                'id' => 2,
-                'title' => 'React Component Lifecycle',
-                'student_name' => 'Emma Smith',
-                'student_id' => 202,
-                'date' => Carbon::now()->addDays(2)->format('Y-m-d'),
-                'time' => '14:00:00',
-                'end_time' => '15:30:00',
-                'status' => 'confirmed'
-            ],
-            [
-                'id' => 3,
-                'title' => 'UI Design Principles',
-                'student_name' => 'John Davis',
-                'student_id' => 203,
-                'date' => Carbon::now()->addDays(3)->format('Y-m-d'),
-                'time' => '09:00:00',
-                'end_time' => '10:30:00',
-                'status' => 'pending'
-            ],
-        ];
+        return LearningSession::with(['children', 'subject', 'course'])
+            ->where('teacher_id', $this->user->id)
+            ->where('start_time', '>', now())
+            ->where('status', LearningSession::STATUS_SCHEDULED)
+            ->orderBy('start_time')
+            ->limit(5)
+            ->get();
     }
 
-    // Get active courses for the teacher
+    // Get active courses for the teacher (real data)
     public function getCoursesProperty()
     {
-        // In a real app, you would fetch from the database
-        // For now, returning mock data
-        return [
-            [
-                'id' => 1,
-                'name' => 'Advanced Laravel Development',
-                'students' => 12,
-                'progress' => 45,
-                'status' => 'active'
-            ],
-            [
-                'id' => 2,
-                'name' => 'React and Redux Masterclass',
-                'students' => 8,
-                'progress' => 30,
-                'status' => 'active'
-            ],
-        ];
+        return Course::where('teacher_profile_id', $this->teacherProfile->id)
+            ->where('status', 'active')
+            ->withCount('enrollments')
+            ->limit(5)
+            ->get();
     }
 
-    // Get recent students for the teacher
+    // Get recent students for the teacher (real data)
     public function getRecentStudentsProperty()
     {
-        // In a real app, you would fetch from the database
-        // For now, returning mock data
-        return [
-            [
-                'id' => 201,
-                'name' => 'Alex Johnson',
-                'courses' => ['Advanced Laravel Development'],
-                'last_session' => Carbon::now()->subDays(2)->format('Y-m-d')
-            ],
-            [
-                'id' => 202,
-                'name' => 'Emma Smith',
-                'courses' => ['React and Redux Masterclass'],
-                'last_session' => Carbon::now()->subDays(3)->format('Y-m-d')
-            ],
-            [
-                'id' => 203,
-                'name' => 'John Davis',
-                'courses' => ['UI/UX Design Fundamentals'],
-                'last_session' => Carbon::now()->subDays(5)->format('Y-m-d')
-            ],
-            [
-                'id' => 204,
-                'name' => 'Sophia Rodriguez',
-                'courses' => ['Advanced Laravel Development', 'React and Redux Masterclass'],
-                'last_session' => Carbon::now()->subDays(7)->format('Y-m-d')
-            ],
-        ];
+        return Children::whereHas('learningSessions', function($query) {
+                $query->where('teacher_id', $this->user->id);
+            })
+            ->withCount('learningSessions')
+            ->orderBy('updated_at', 'desc')
+            ->limit(5)
+            ->get();
     }
 
-    // Get recent activity for the teacher
+    // Get recent activity for the teacher (real data from learning sessions)
     public function getRecentActivityProperty()
     {
-        // In a real app, you would fetch from the database
-        // For now, returning mock data
-        return [
-            [
-                'type' => 'session_completed',
-                'title' => 'Session completed',
-                'description' => 'Completed session with Alex Johnson on Laravel Middleware',
-                'date' => Carbon::now()->subDays(1)->toDateTimeString(),
-                'icon' => 'o-check-circle',
-                'color' => 'bg-success-100 text-success-600'
-            ],
-            [
-                'type' => 'course_updated',
-                'title' => 'Course updated',
-                'description' => 'Updated curriculum for Advanced Laravel Development',
-                'date' => Carbon::now()->subDays(2)->toDateTimeString(),
-                'icon' => 'o-document-text',
-                'color' => 'bg-info-100 text-info-600'
-            ],
-            [
-                'type' => 'session_scheduled',
-                'title' => 'New session scheduled',
-                'description' => 'Upcoming session with Emma Smith on React Components',
-                'date' => Carbon::now()->subDays(3)->toDateTimeString(),
-                'icon' => 'o-calendar',
-                'color' => 'bg-primary-100 text-primary-600'
-            ],
-            [
-                'type' => 'material_added',
-                'title' => 'Material added',
-                'description' => 'Added new learning materials to React and Redux Masterclass',
-                'date' => Carbon::now()->subDays(4)->toDateTimeString(),
-                'icon' => 'o-document-plus',
-                'color' => 'bg-secondary-100 text-secondary-600'
-            ],
-        ];
+        $recentSessions = LearningSession::with(['children', 'subject'])
+            ->where('teacher_id', $this->user->id)
+            ->orderBy('updated_at', 'desc')
+            ->limit(5)
+            ->get();
+
+        $activities = [];
+
+        foreach($recentSessions as $session) {
+            $activityType = '';
+            $title = '';
+            $description = '';
+            $icon = '';
+            $color = '';
+
+            if($session->status === LearningSession::STATUS_COMPLETED) {
+                $activityType = 'session_completed';
+                $title = 'Session completed';
+                $description = 'Completed session with ' . ($session->children->name ?? 'Student') .
+                               ' on ' . ($session->subject->name ?? 'Subject');
+                $icon = 'o-check-circle';
+                $color = 'bg-success-100 text-success-600';
+            } elseif($session->status === LearningSession::STATUS_SCHEDULED) {
+                $activityType = 'session_scheduled';
+                $title = 'New session scheduled';
+                $description = 'Upcoming session with ' . ($session->children->name ?? 'Student') .
+                               ' on ' . ($session->subject->name ?? 'Subject');
+                $icon = 'o-calendar';
+                $color = 'bg-primary-100 text-primary-600';
+            } elseif($session->status === LearningSession::STATUS_CANCELLED) {
+                $activityType = 'session_cancelled';
+                $title = 'Session cancelled';
+                $description = 'Cancelled session with ' . ($session->children->name ?? 'Student') .
+                               ' on ' . ($session->subject->name ?? 'Subject');
+                $icon = 'o-x-circle';
+                $color = 'bg-error-100 text-error-600';
+            }
+
+            $activities[] = [
+                'type' => $activityType,
+                'title' => $title,
+                'description' => $description,
+                'date' => $session->updated_at->toDateTimeString(),
+                'icon' => $icon,
+                'color' => $color
+            ];
+        }
+
+        return $activities;
     }
 
     // For formatting dates
@@ -287,25 +268,27 @@ new class extends Component {
                                     <tbody>
                                         @foreach($this->upcomingSessions as $session)
                                             <tr>
-                                                <td class="font-medium">{{ $session['title'] }}</td>
-                                                <td>{{ $session['student_name'] }}</td>
+                                                <td class="font-medium">
+                                                    {{ $session->subject ? $session->subject->name : 'Untitled Session' }}
+                                                </td>
+                                                <td>{{ $session->children ? $session->children->name : 'Unknown Student' }}</td>
                                                 <td>
                                                     <div class="flex flex-col">
-                                                        <span>{{ $this->formatDate($session['date']) }}</span>
+                                                        <span>{{ $session->start_time ? $this->formatDate($session->start_time) : 'Date TBD' }}</span>
                                                         <span class="text-xs opacity-70">
-                                                            {{ \Carbon\Carbon::parse($session['time'])->format('h:i A') }} -
-                                                            {{ \Carbon\Carbon::parse($session['end_time'])->format('h:i A') }}
+                                                            {{ $session->start_time ? $session->start_time->format('h:i A') : '' }} -
+                                                            {{ $session->end_time ? $session->end_time->format('h:i A') : '' }}
                                                         </span>
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <div class="badge {{ $session['status'] === 'confirmed' ? 'badge-success' : 'badge-warning' }}">
-                                                        {{ ucfirst($session['status']) }}
+                                                    <div class="badge {{ $session->status === LearningSession::STATUS_SCHEDULED ? 'badge-success' : 'badge-warning' }}">
+                                                        {{ ucfirst($session->status) }}
                                                     </div>
                                                 </td>
                                                 <td>
                                                     <div class="flex gap-1">
-                                                        <a href="{{ route('teachers.sessions.show', $session['id']) }}" class="btn btn-xs btn-outline">
+                                                        <a href="{{ route('teachers.sessions.show', $session->id) }}" class="btn btn-xs btn-outline">
                                                             Details
                                                         </a>
                                                     </div>
@@ -341,26 +324,40 @@ new class extends Component {
                                         <div class="p-4 card-body">
                                             <div class="flex items-start justify-between">
                                                 <div>
-                                                    <h3 class="text-lg font-semibold">{{ $course['name'] }}</h3>
+                                                    <h3 class="text-lg font-semibold">{{ $course->name }}</h3>
                                                     <div class="mt-1 text-sm opacity-70">
-                                                        <span>{{ $course['students'] }} students enrolled</span>
+                                                        <span>{{ $course->enrollments_count ?? 0 }} students enrolled</span>
                                                     </div>
                                                 </div>
-                                                <div class="badge {{ $course['status'] === 'active' ? 'badge-success' : 'badge-warning' }}">
-                                                    {{ ucfirst($course['status']) }}
+                                                <div class="badge {{ $course->status === 'active' ? 'badge-success' : 'badge-warning' }}">
+                                                    {{ ucfirst($course->status) }}
                                                 </div>
                                             </div>
+
+                                            @php
+                                                // Calculate course progress - this is a simplified example
+                                                // You would replace this with real logic based on your app's design
+                                                $progress = 0;
+                                                if($course->start_date && $course->end_date) {
+                                                    $totalDays = $course->start_date->diffInDays($course->end_date);
+                                                    $elapsedDays = $course->start_date->diffInDays(now());
+                                                    if($totalDays > 0) {
+                                                        $progress = min(100, round(($elapsedDays / $totalDays) * 100));
+                                                    }
+                                                }
+                                            @endphp
+
                                             <div class="mt-3">
                                                 <div class="flex items-center justify-between mb-1">
                                                     <span class="text-sm">Progress</span>
-                                                    <span class="text-sm font-medium">{{ $course['progress'] }}%</span>
+                                                    <span class="text-sm font-medium">{{ $progress }}%</span>
                                                 </div>
                                                 <div class="h-2 overflow-hidden rounded-full bg-base-300">
-                                                    <div class="h-full {{ $course['progress'] > 75 ? 'bg-success' : ($course['progress'] > 40 ? 'bg-info' : 'bg-primary') }}" style="width: {{ $course['progress'] }}%"></div>
+                                                    <div class="h-full {{ $progress > 75 ? 'bg-success' : ($progress > 40 ? 'bg-info' : 'bg-primary') }}" style="width: {{ $progress }}%"></div>
                                                 </div>
                                             </div>
                                             <div class="justify-end mt-4 card-actions">
-                                                <a href="{{ route('teachers.courses.show', $course['id']) }}" class="btn btn-sm btn-ghost">View Details</a>
+                                                <a href="{{ route('teachers.courses.show', $course->id) }}" class="btn btn-sm btn-ghost">View Details</a>
                                             </div>
                                         </div>
                                     </div>
@@ -435,24 +432,30 @@ new class extends Component {
                     <div class="card-body">
                         <h2 class="mb-4 card-title">Recent Students</h2>
                         <div class="space-y-3">
-                            @foreach($this->recentStudents as $student)
-                                <div class="flex items-center gap-3">
-                                    <div class="avatar placeholder">
-                                        <div class="w-10 h-10 rounded-full bg-neutral-focus text-neutral-content">
-                                            <span>{{ substr($student['name'], 0, 1) }}</span>
+                            @if(count($this->recentStudents) > 0)
+                                @foreach($this->recentStudents as $student)
+                                    <div class="flex items-center gap-3">
+                                        <div class="avatar placeholder">
+                                            <div class="w-10 h-10 rounded-full bg-neutral-focus text-neutral-content">
+                                                <span>{{ substr($student->name, 0, 1) }}</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="flex-1">
-                                        <div class="font-medium">{{ $student['name'] }}</div>
+                                        <div class="flex-1">
+                                            <div class="font-medium">{{ $student->name }}</div>
+                                            <div class="text-xs opacity-70">
+                                                {{ $student->learning_sessions_count ?? 0 }} sessions
+                                            </div>
+                                        </div>
                                         <div class="text-xs opacity-70">
-                                            {{ count($student['courses']) }} course(s): {{ implode(', ', $student['courses']) }}
+                                            {{ $this->formatDate($student->updated_at) }}
                                         </div>
                                     </div>
-                                    <div class="text-xs opacity-70">
-                                        {{ $this->formatDate($student['last_session']) }}
-                                    </div>
+                                @endforeach
+                            @else
+                                <div class="p-4 text-center">
+                                    <p class="text-base-content/70">No students found.</p>
                                 </div>
-                            @endforeach
+                            @endif
                         </div>
                         <div class="justify-center mt-4 card-actions">
                             <a href="{{ route('teachers.students.index') }}" class="btn btn-ghost btn-sm">View All Students</a>
@@ -465,23 +468,29 @@ new class extends Component {
                     <div class="card-body">
                         <h2 class="mb-4 card-title">Recent Activity</h2>
                         <div class="space-y-4">
-                            @foreach($this->recentActivity as $activity)
-                                <div class="flex gap-4">
-                                    <div class="flex-shrink-0">
-                                        <div class="w-10 h-10 rounded-full flex items-center justify-center {{ $activity['color'] }}">
-                                            <x-icon name="{{ $activity['icon'] }}" class="w-5 h-5" />
+                            @if(count($this->recentActivity) > 0)
+                                @foreach($this->recentActivity as $activity)
+                                    <div class="flex gap-4">
+                                        <div class="flex-shrink-0">
+                                            <div class="w-10 h-10 rounded-full flex items-center justify-center {{ $activity['color'] }}">
+                                                <x-icon name="{{ $activity['icon'] }}" class="w-5 h-5" />
+                                            </div>
+                                        </div>
+                                        <div class="flex-1">
+                                            <div class="font-medium">{{ $activity['title'] }}</div>
+                                            <div class="text-sm opacity-70">{{ $activity['description'] }}</div>
+                                            <div class="mt-1 text-xs opacity-50">{{ $this->formatDate($activity['date']) }}</div>
                                         </div>
                                     </div>
-                                    <div class="flex-1">
-                                        <div class="font-medium">{{ $activity['title'] }}</div>
-                                        <div class="text-sm opacity-70">{{ $activity['description'] }}</div>
-                                        <div class="mt-1 text-xs opacity-50">{{ $this->formatDate($activity['date']) }}</div>
-                                    </div>
+                                    @if(!$loop->last)
+                                        <div class="h-4 ml-5 border-l-2 border-dashed border-base-300"></div>
+                                    @endif
+                                @endforeach
+                            @else
+                                <div class="p-4 text-center">
+                                    <p class="text-base-content/70">No recent activity.</p>
                                 </div>
-                                @if(!$loop->last)
-                                    <div class="h-4 ml-5 border-l-2 border-dashed border-base-300"></div>
-                                @endif
-                            @endforeach
+                            @endif
                         </div>
                     </div>
                 </div>
@@ -513,4 +522,4 @@ new class extends Component {
             </div>
         </div>
     </div>
-</d
+</div>

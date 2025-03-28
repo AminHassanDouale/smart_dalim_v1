@@ -11,9 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('teacher_profiles', function (Blueprint $table) {
-            $table->boolean('has_completed_profile')->default(false);
-            $table->string('status')->nullable();
+        Schema::create('payment_methods', function (Blueprint $table) {
+            $table->id();
+            $table->timestamps();
         });
     }
 
@@ -22,8 +22,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('teacher_profiles', function (Blueprint $table) {
-            $table->dropColumn(['has_completed_profile', 'status']);
-        });
+        Schema::dropIfExists('payment_methods');
     }
 };

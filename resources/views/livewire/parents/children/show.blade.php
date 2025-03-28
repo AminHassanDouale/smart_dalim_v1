@@ -55,90 +55,124 @@ new class extends Component {
 
     protected function loadData()
     {
-        $this->loadChartData();
+        $this->loadSubjectProgressData();
+        $this->loadSessionAttendanceData();
+        $this->loadAssessmentScoresData();
         $this->loadUpcomingSessions();
         $this->loadRecentActivity();
         $this->loadLearningMaterials();
         $this->loadAssessmentSubmissions();
     }
 
-    protected function loadChartData()
+    protected function loadSubjectProgressData()
     {
-        // Subject progress data (in a real app, fetch this from database)
-        $subjects = $this->child->subjects ?? [];
+        // Get subjects with progress from the child relationship
         $this->subjectProgressData = [];
-
-        foreach ($subjects as $subject) {
-            $this->subjectProgressData[] = [
-                'name' => $subject->name,
-                'progress' => rand(40, 95) // Placeholder - in real app calculate actual progress
-            ];
+        
+        if ($this->child->subjects && count($this->child->subjects) > 0) {
+            foreach ($this->child->subjects as $subject) {
+                // Calculate actual progress based on completed units or curriculum progress
+                $progress = 0;
+                if (isset($subject->pivot) && isset($subject->pivot->progress)) {
+                    $progress = $subject->pivot->progress;
+                }
+                
+                $this->subjectProgressData[] = [
+                    'name' => $subject->name,
+                    'progress' => $progress
+                ];
+            }
         }
+    }
 
-        // If no subjects, add some mock data
-        if (count($this->subjectProgressData) === 0) {
-            $this->subjectProgressData = [
-                ['name' => 'Mathematics', 'progress' => rand(40, 95)],
-                ['name' => 'Science', 'progress' => rand(40, 95)],
-                ['name' => 'English', 'progress' => rand(40, 95)],
-                ['name' => 'History', 'progress' => rand(40, 95)]
-            ];
-        }
-
-        // Session attendance data (last 6 months)
+    protected function loadSessionAttendanceData()
+    {
         $this->sessionAttendanceData = [];
         $currentMonth = Carbon::now();
-
+        
         for ($i = 5; $i >= 0; $i--) {
             $month = $currentMonth->copy()->subMonths($i);
+            $startOfMonth = $month->copy()->startOfMonth();
+            $endOfMonth = $month->copy()->endOfMonth();
+            
+            // Replace 'child_id' with your actual column name, e.g., 'children_id'
+            $sessionCount = LearningSession::where('children_id', $this->child->id)
+                ->whereBetween('start_time', [$startOfMonth, $endOfMonth])
+                ->count();
+                
             $this->sessionAttendanceData[] = [
                 'month' => $month->format('M'),
-                'sessions' => rand(2, 8) // Placeholder - in real app fetch actual attendance
+                'sessions' => $sessionCount
             ];
         }
+    }
 
-        // Assessment scores data (last 5 assessments)
+    protected function loadAssessmentScoresData()
+    {
+        // Get real assessment scores from the child's assessments
         $this->assessmentScoresData = [];
-
-        for ($i = 1; $i <= 5; $i++) {
+        
+        // The column might be 'created_at', 'updated_at', 'completed_at', or 'submission_date' instead of 'submitted_at'
+        $assessmentSubmissions = AssessmentSubmission::where('children_id', $this->child->id)
+            ->with('assessment')
+            ->orderBy('created_at', 'desc') // Using created_at as a fallback
+            ->take(5)
+            ->get();
+            
+        foreach ($assessmentSubmissions as $submission) {
+            $assessmentName = "Assessment " . $submission->id;
+            if (isset($submission->assessment) && isset($submission->assessment->title)) {
+                $assessmentName = $submission->assessment->title;
+            }
+            
             $this->assessmentScoresData[] = [
-                'name' => "Test {$i}",
-                'score' => rand(60, 100)
+                'name' => $assessmentName,
+                'score' => $submission->score
             ];
         }
     }
 
     protected function loadUpcomingSessions()
     {
-        // In a real app, fetch from database
+        // Get real upcoming sessions for this child
         $this->upcomingSessions = [];
-
-        // Mock data
-        $subjects = ['Mathematics', 'Science', 'English', 'History', 'Programming'];
-        $teachers = ['Sarah Johnson', 'Michael Chen', 'Emily Rodriguez', 'David Wilson'];
-
-        for ($i = 0; $i < 3; $i++) {
-            $startDate = Carbon::now()->addDays(rand(1, 14))->setHour(rand(9, 17));
-            $endDate = $startDate->copy()->addHours(rand(1, 2));
-
+        
+        $sessions = LearningSession::where('children_id', $this->child->id)
+            ->where('start_time', '>', Carbon::now())
+            ->with(['subject', 'teacher'])
+            ->orderBy('start_time')
+            ->take(3)
+            ->get();
+            
+        foreach ($sessions as $session) {
+            $subjectName = 'Unknown Subject';
+            if (isset($session->subject) && isset($session->subject->name)) {
+                $subjectName = $session->subject->name;
+            }
+            
+            $teacherName = 'Unknown Teacher';
+            if (isset($session->teacher) && isset($session->teacher->name)) {
+                $teacherName = $session->teacher->name;
+            }
+            
             $this->upcomingSessions[] = [
-                'id' => $i + 1,
-                'subject' => $subjects[array_rand($subjects)],
-                'teacher' => $teachers[array_rand($teachers)],
-                'start_time' => $startDate,
-                'end_time' => $endDate,
-                'location' => rand(0, 1) ? 'Online' : 'In-Person',
-                'status' => 'scheduled'
+                'id' => $session->id,
+                'subject' => $subjectName,
+                'teacher' => $teacherName,
+                'start_time' => $session->start_time,
+                'end_time' => $session->end_time,
+                'location' => $session->location,
+                'status' => $session->status
             ];
         }
     }
 
     protected function loadRecentActivity()
     {
-        // In a real app, fetch from database
+        // Initialize activity array
         $this->recentActivity = [];
-
-        // Activity types
+        
+        // Activity types mapping
         $types = [
             'session_completed' => [
                 'icon' => 'o-check-circle',
@@ -161,103 +195,154 @@ new class extends Component {
                 'color' => 'bg-indigo-100 text-indigo-600'
             ],
         ];
-
-        $subjects = ['Mathematics', 'Science', 'English', 'History', 'Programming'];
-
-        // Generate 5 recent activities
-        for ($i = 0; $i < 5; $i++) {
-            $type = array_rand($types);
-            $subject = $subjects[array_rand($subjects)];
-            $daysAgo = $i * rand(1, 3);
-
-            $description = match($type) {
-                'session_completed' => "{$this->child->name} completed a {$subject} session",
-                'assessment_submitted' => "{$this->child->name} submitted a {$subject} assessment",
-                'homework_assigned' => "Homework assigned for {$subject}",
-                'material_downloaded' => "Learning materials downloaded for {$subject}",
-                'teacher_feedback' => "Teacher provided feedback on {$subject} progress",
-                default => "Activity related to {$subject}"
-            };
-
+        
+        // Get recent sessions (completed)
+        $recentSessions = LearningSession::where('children_id', $this->child->id)
+            ->where('status', 'completed')
+            ->with('subject')
+            ->orderBy('end_time', 'desc')
+            ->take(2)
+            ->get();
+            
+        foreach ($recentSessions as $session) {
+            $subjectName = 'learning';
+            if (isset($session->subject) && isset($session->subject->name)) {
+                $subjectName = $session->subject->name;
+            }
+            
             $this->recentActivity[] = [
-                'type' => $type,
-                'description' => $description,
-                'subject' => $subject,
-                'date' => Carbon::now()->subDays($daysAgo),
-                'icon' => $types[$type]['icon'],
-                'color' => $types[$type]['color']
+                'type' => 'session_completed',
+                'description' => "{$this->child->name} completed a {$subjectName} session",
+                'subject' => $subjectName,
+                'date' => $session->end_time,
+                'icon' => $types['session_completed']['icon'],
+                'color' => $types['session_completed']['color']
             ];
+        }
+        
+        // Get recent assessment submissions
+        $recentSubmissions = AssessmentSubmission::where('children_id', $this->child->id)
+            ->with('assessment.subject')
+            ->orderBy('created_at', 'desc') // Using created_at instead of submitted_at
+            ->take(2)
+            ->get();
+            
+        foreach ($recentSubmissions as $submission) {
+            $subject = 'Unknown Subject';
+            
+            if (isset($submission->assessment) && 
+                isset($submission->assessment->subject) && 
+                isset($submission->assessment->subject->name)) {
+                $subject = $submission->assessment->subject->name;
+            }
+            
+            // Use created_at instead of submitted_at for the date
+            $submissionDate = $submission->created_at;
+            
+            $this->recentActivity[] = [
+                'type' => 'assessment_submitted',
+                'description' => "{$this->child->name} submitted a {$subject} assessment",
+                'subject' => $subject,
+                'date' => $submissionDate,
+                'icon' => $types['assessment_submitted']['icon'],
+                'color' => $types['assessment_submitted']['color']
+            ];
+        }
+        
+        // Sort by date (newest first) and limit to 5
+        if (count($this->recentActivity) > 0) {
+            usort($this->recentActivity, function($a, $b) {
+                return $b['date']->timestamp - $a['date']->timestamp;
+            });
+            
+            $this->recentActivity = array_slice($this->recentActivity, 0, 5);
         }
     }
 
     protected function loadLearningMaterials()
     {
-        // In a real app, fetch from database
+        // Get real learning materials for this child
         $this->learningMaterials = [];
-
-        // Mock data
-        $types = ['document', 'pdf', 'video', 'presentation', 'worksheet'];
-        $subjects = ['Mathematics', 'Science', 'English', 'History', 'Programming'];
-
-        for ($i = 0; $i < 5; $i++) {
-            $type = $types[array_rand($types)];
-            $subject = $subjects[array_rand($subjects)];
-
-            $this->learningMaterials[] = [
-                'id' => $i + 1,
-                'title' => "{$subject} " . match($type) {
-                    'document' => 'Notes',
-                    'pdf' => 'Textbook Chapter',
-                    'video' => 'Tutorial',
-                    'presentation' => 'Slides',
-                    'worksheet' => 'Exercises',
-                    default => 'Material'
-                },
-                'type' => $type,
-                'subject' => $subject,
-                'date_added' => Carbon::now()->subDays(rand(1, 30)),
-                'size' => rand(1, 10) . match(rand(0, 2)) {
-                    0 => ' MB',
-                    1 => ' KB',
-                    2 => ' pages'
-                },
-                'downloaded' => rand(0, 1)
-            ];
+        
+        // Check if the relationship method exists and get the materials
+        if (method_exists($this->child, 'learningMaterials')) {
+            $materials = $this->child->learningMaterials()->with('subject')
+                ->orderBy('created_at', 'desc')
+                ->take(5)
+                ->get();
+                
+            foreach ($materials as $material) {
+                $subjectName = 'General';
+                if (isset($material->subject) && isset($material->subject->name)) {
+                    $subjectName = $material->subject->name;
+                }
+                
+                $fileSize = '0 KB';
+                if (isset($material->size)) {
+                    $fileSize = $material->size;
+                }
+                
+                $this->learningMaterials[] = [
+                    'id' => $material->id,
+                    'title' => $material->title,
+                    'type' => $material->type,
+                    'subject' => $subjectName,
+                    'date_added' => $material->created_at,
+                    'size' => $fileSize,
+                    'downloaded' => isset($material->download_count) && $material->download_count > 0
+                ];
+            }
         }
     }
 
     protected function loadAssessmentSubmissions()
     {
-        // In a real app, fetch from database
+        // Get real assessment submissions for this child
         $this->assessmentSubmissions = [];
-
-        // Mock data
-        $subjects = ['Mathematics', 'Science', 'English', 'History', 'Programming'];
-        $types = ['Quiz', 'Test', 'Exam', 'Assignment'];
-
-        for ($i = 0; $i < 5; $i++) {
-            $type = $types[array_rand($types)];
-            $subject = $subjects[array_rand($subjects)];
-            $score = rand(60, 100);
-            $daysAgo = rand(5, 60);
-
+        
+        $submissions = AssessmentSubmission::where('children_id', $this->child->id)
+            ->with(['assessment.subject'])
+            ->orderBy('created_at', 'desc') // Using created_at instead of submitted_at
+            ->take(5)
+            ->get();
+            
+        foreach ($submissions as $submission) {
+            $title = "Assessment {$submission->id}";
+            if (isset($submission->assessment) && isset($submission->assessment->title)) {
+                $title = $submission->assessment->title;
+            }
+            
+            $type = 'quiz';
+            if (isset($submission->assessment) && isset($submission->assessment->type)) {
+                $type = $submission->assessment->type;
+            }
+            
+            $subject = 'Unknown Subject';
+            if (isset($submission->assessment) && 
+                isset($submission->assessment->subject) && 
+                isset($submission->assessment->subject->name)) {
+                $subject = $submission->assessment->subject->name;
+            }
+            
+            $totalPoints = 100;
+            if (isset($submission->assessment) && isset($submission->assessment->total_points)) {
+                $totalPoints = $submission->assessment->total_points;
+            }
+            
+            $status = $submission->score >= 70 ? 'passed' : 'needs_improvement';
+            
             $this->assessmentSubmissions[] = [
-                'id' => $i + 1,
-                'title' => "{$subject} {$type} " . ($i + 1),
-                'type' => strtolower($type),
+                'id' => $submission->id,
+                'title' => $title,
+                'type' => $type,
                 'subject' => $subject,
-                'submission_date' => Carbon::now()->subDays($daysAgo),
-                'score' => $score,
-                'total' => 100,
-                'status' => $score >= 70 ? 'passed' : 'needs_improvement',
-                'feedback' => rand(0, 1) ? 'Good work overall, focus on improving in areas X and Y.' : null
+                'submission_date' => $submission->created_at, // Using created_at instead of submitted_at
+                'score' => $submission->score,
+                'total' => $totalPoints,
+                'status' => $status,
+                'feedback' => $submission->feedback
             ];
         }
-
-        // Sort by date (newest first)
-        usort($this->assessmentSubmissions, function($a, $b) {
-            return $b['submission_date']->timestamp - $a['submission_date']->timestamp;
-        });
     }
 
     public function setActiveTab($tab)
@@ -360,7 +445,6 @@ new class extends Component {
         return Carbon::parse($date)->diffForHumans();
     }
 }; ?>
-
 <div class="min-h-screen p-6 bg-base-200">
     <div class="mx-auto max-w-7xl">
         <!-- Header -->
@@ -380,7 +464,7 @@ new class extends Component {
                     <span>Edit Profile</span>
                 </a>
                 <a href="{{ route('parents.sessions.requests', ['child_id' => $child->id]) }}" class="gap-2 btn btn-primary">
-                    <x-icon name="o-calendar-plus" class="w-4 h-4" />
+                    <x-icon name="o-eye" class="w-4 h-4" />
                     <span>Schedule Session</span>
                 </a>
             </div>
@@ -434,7 +518,7 @@ new class extends Component {
                             </div>
                             <div class="flex items-center justify-between">
                                 <span class="opacity-70">Added:</span>
-                                <span class="font-medium">{{ $formatDate($child->created_at) }}</span>
+                                <span class="font-medium">{{ $this->formatDate($child->created_at) }}</span>
                             </div>
                         </div>
 
@@ -452,22 +536,28 @@ new class extends Component {
                     <div class="card-body">
                         <h3 class="text-lg card-title">Subject Progress</h3>
 
-                        <div class="mt-4 space-y-4">
-                            @foreach($subjectProgressData as $subject)
-                                <div>
-                                    <div class="flex items-center justify-between mb-1">
-                                        <div class="flex items-center gap-2">
-                                            <x-icon name="{{ $getSubjectIcon($subject['name']) }}" class="w-4 h-4 opacity-70" />
-                                            <span class="text-sm">{{ $subject['name'] }}</span>
+                        @if(count($subjectProgressData) > 0)
+                            <div class="mt-4 space-y-4">
+                                @foreach($subjectProgressData as $subject)
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1">
+                                            <div class="flex items-center gap-2">
+                                                <x-icon name="{{ $this->getSubjectIcon($subject['name']) }}" class="w-4 h-4 opacity-70" />
+                                                <span class="text-sm">{{ $subject['name'] }}</span>
+                                            </div>
+                                            <span class="text-sm font-medium">{{ $subject['progress'] }}%</span>
                                         </div>
-                                        <span class="text-sm font-medium">{{ $subject['progress'] }}%</span>
+                                        <div class="w-full h-2 overflow-hidden rounded-full bg-base-300">
+                                            <div class="h-full {{ $this->getProgressColor($subject['progress']) }}" style="width: {{ $subject['progress'] }}%"></div>
+                                        </div>
                                     </div>
-                                    <div class="w-full h-2 overflow-hidden rounded-full bg-base-300">
-                                        <div class="h-full {{ $getProgressColor($subject['progress']) }}" style="width: {{ $subject['progress'] }}%"></div>
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
+                                @endforeach
+                            </div>
+                        @else
+                            <div class="py-4 text-center">
+                                <p class="text-sm opacity-70">No subjects enrolled</p>
+                            </div>
+                        @endif
 
                         <div class="justify-center mt-4 card-actions">
                             <a href="{{ route('parents.progress.child', $child->id) }}" class="btn btn-sm btn-outline btn-block">
@@ -572,28 +662,40 @@ new class extends Component {
 
                                 <div>
                                     <div class="text-center stat-title">Sessions This Month</div>
-                                    <div class="flex items-end justify-center h-24">
-                                        @foreach($sessionAttendanceData as $index => $month)
-                                            <div class="flex flex-col items-center mx-1">
-                                                <div class="w-10 mb-1 text-xs text-center">{{ $month['sessions'] }}</div>
-                                                <div style="height: {{ min(80, $month['sessions'] * 10) }}px" class="w-6 rounded-t bg-primary"></div>
-                                                <div class="w-10 mt-1 text-xs text-center">{{ $month['month'] }}</div>
-                                            </div>
-                                        @endforeach
-                                    </div>
+                                    @if(count($sessionAttendanceData) > 0)
+                                        <div class="flex items-end justify-center h-24">
+                                            @foreach($sessionAttendanceData as $index => $month)
+                                                <div class="flex flex-col items-center mx-1">
+                                                    <div class="w-10 mb-1 text-xs text-center">{{ $month['sessions'] }}</div>
+                                                    <div style="height: {{ min(80, $month['sessions'] * 10) }}px" class="w-6 rounded-t bg-primary"></div>
+                                                    <div class="w-10 mt-1 text-xs text-center">{{ $month['month'] }}</div>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    @else
+                                        <div class="flex items-center justify-center h-24">
+                                            <p class="text-sm opacity-70">No session data</p>
+                                        </div>
+                                    @endif
                                 </div>
 
                                 <div>
                                     <div class="text-center stat-title">Assessment Scores</div>
-                                    <div class="flex items-end justify-center h-24">
-                                        @foreach($assessmentScoresData as $index => $assessment)
-                                            <div class="flex flex-col items-center mx-1">
-                                                <div class="w-10 mb-1 text-xs text-center">{{ $assessment['score'] }}%</div>
-                                                <div style="height: {{ min(80, $assessment['score'] * 0.8) }}px" class="w-6 {{ $assessment['score'] >= 70 ? 'bg-success' : ($assessment['score'] >= 60 ? 'bg-warning' : 'bg-error') }} rounded-t"></div>
-                                                <div class="w-10 mt-1 text-xs text-center truncate">{{ $assessment['name'] }}</div>
-                                            </div>
-                                        @endforeach
-                                    </div>
+                                    @if(count($assessmentScoresData) > 0)
+                                        <div class="flex items-end justify-center h-24">
+                                            @foreach($assessmentScoresData as $index => $assessment)
+                                                <div class="flex flex-col items-center mx-1">
+                                                    <div class="w-10 mb-1 text-xs text-center">{{ $assessment['score'] }}%</div>
+                                                    <div style="height: {{ min(80, $assessment['score'] * 0.8) }}px" class="w-6 {{ $assessment['score'] >= 70 ? 'bg-success' : ($assessment['score'] >= 60 ? 'bg-warning' : 'bg-error') }} rounded-t"></div>
+                                                    <div class="w-10 mt-1 text-xs text-center truncate">{{ $assessment['name'] }}</div>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    @else
+                                        <div class="flex items-center justify-center h-24">
+                                            <p class="text-sm opacity-70">No assessment data</p>
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
                         </div>
@@ -627,8 +729,8 @@ new class extends Component {
                                                     <td class="font-medium">{{ $session['subject'] }}</td>
                                                     <td>
                                                         <div class="flex flex-col">
-                                                            <span>{{ $formatDate($session['start_time']) }}</span>
-                                                            <span class="text-xs opacity-70">{{ $formatTime($session['start_time']) }} - {{ $formatTime($session['end_time']) }}</span>
+                                                            <span>{{ $this->formatDate($session['start_time']) }}</span>
+                                                            <span class="text-xs opacity-70">{{ $this->formatTime($session['start_time']) }} - {{ $this->formatTime($session['end_time']) }}</span>
                                                         </div>
                                                     </td>
                                                     <td>{{ $session['teacher'] }}</td>
@@ -656,7 +758,7 @@ new class extends Component {
                                     <h3 class="text-lg font-medium">No upcoming sessions</h3>
                                     <p class="mt-1 text-base-content/70">Schedule a session to continue learning</p>
                                     <a href="{{ route('parents.sessions.requests', ['child_id' => $child->id]) }}" class="mt-4 btn btn-primary">
-                                        <x-icon name="o-calendar-plus" class="w-4 h-4 mr-2" />
+                                        <x-icon name="o-eye" class="w-4 h-4 mr-2" />
                                         Schedule Session
                                     </a>
                                 </div>
@@ -681,7 +783,7 @@ new class extends Component {
                                             <div class="flex-1">
                                                 <div class="font-medium">{{ $activity['description'] }}</div>
                                                 <div class="text-sm opacity-70">{{ $activity['subject'] }}</div>
-                                                <div class="mt-1 text-xs opacity-50">{{ $getRelativeDate($activity['date']) }}</div>
+                                                <div class="mt-1 text-xs opacity-50">{{ $this->getRelativeDate($activity['date']) }}</div>
                                             </div>
                                         </div>
                                         @if(!$loop->last)
@@ -691,7 +793,7 @@ new class extends Component {
                                 </div>
                             @else
                                 <div class="py-8 text-center">
-                                    <x-icon name="o-clock-rewind" class="w-12 h-12 mx-auto mb-3 text-base-content/30" />
+                                    <x-icon name="o-eye" class="w-12 h-12 mx-auto mb-3 text-base-content/30" />
                                     <h3 class="text-lg font-medium">No recent activity</h3>
                                     <p class="mt-1 text-base-content/70">Activity will appear here as your child progresses</p>
                                 </div>
@@ -707,7 +809,7 @@ new class extends Component {
                             <div class="flex items-center justify-between mb-4">
                                 <h3 class="card-title">Learning Sessions</h3>
                                 <a href="{{ route('parents.sessions.requests', ['child_id' => $child->id]) }}" class="btn btn-primary btn-sm">
-                                    <x-icon name="o-calendar-plus" class="w-4 h-4 mr-2" />
+                                    <x-icon name="o-eye" class="w-4 h-4 mr-2" />
                                     Schedule New
                                 </a>
                             </div>
@@ -723,106 +825,62 @@ new class extends Component {
                             <div class="space-y-4">
                                 <h4 class="font-medium">Recent & Upcoming Sessions</h4>
 
-                                <div class="overflow-x-auto">
-                                    <table class="table w-full table-zebra">
-                                        <thead>
-                                            <tr>
-                                                <th>Subject</th>
-                                                <th>Date & Time</th>
-                                                <th>Teacher</th>
-                                                <th>Status</th>
-                                                <th>Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @foreach($upcomingSessions as $session)
+                                @if(count($upcomingSessions) > 0)
+                                    <div class="overflow-x-auto">
+                                        <table class="table w-full table-zebra">
+                                            <thead>
                                                 <tr>
-                                                    <td class="font-medium">{{ $session['subject'] }}</td>
-                                                    <td>
-                                                        <div class="flex flex-col">
-                                                            <span>{{ $formatDate($session['start_time']) }}</span>
-                                                            <span class="text-xs opacity-70">{{ $formatTime($session['start_time']) }} - {{ $formatTime($session['end_time']) }}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td>{{ $session['teacher'] }}</td>
-                                                    <td>
-                                                        <div class="badge badge-info">
-                                                            Upcoming
-                                                        </div>
-                                                    </td>
-                                                    <td>
-                                                        <div class="dropdown dropdown-end">
-                                                            <div tabindex="0" role="button" class="btn btn-ghost btn-xs">
-                                                                <x-icon name="o-ellipsis-vertical" class="w-4 h-4" />
-                                                            </div>
-                                                            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-                                                                <li><a>View Details</a></li>
-                                                                <li><a>Reschedule</a></li>
-                                                                <li><a class="text-error">Cancel Session</a></li>
-                                                            </ul>
-                                                        </div>
-                                                    </td>
+                                                    <th>Subject</th>
+                                                    <th>Date & Time</th>
+                                                    <th>Teacher</th>
+                                                    <th>Status</th>
+                                                    <th>Actions</th>
                                                 </tr>
-                                            @endforeach
-
-                                            <!-- Add some past sessions as examples -->
-                                            <tr>
-                                                <td class="font-medium">Mathematics</td>
-                                                <td>
-                                                    <div class="flex flex-col">
-                                                        <span>{{ $formatDate(Carbon::now()->subDays(2)) }}</span>
-                                                        <span class="text-xs opacity-70">10:00 AM - 11:30 AM</span>
-                                                    </div>
-                                                </td>
-                                                <td>Sarah Johnson</td>
-                                                <td>
-                                                    <div class="badge badge-success">
-                                                        Completed
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <div class="dropdown dropdown-end">
-                                                        <div tabindex="0" role="button" class="btn btn-ghost btn-xs">
-                                                            <x-icon name="o-ellipsis-vertical" class="w-4 h-4" />
-                                                        </div>
-                                                        <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-                                                            <li><a>View Details</a></li>
-                                                            <li><a>View Recording</a></li>
-                                                            <li><a>View Notes</a></li>
-                                                        </ul>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td class="font-medium">Science</td>
-                                                <td>
-                                                    <div class="flex flex-col">
-                                                        <span>{{ $formatDate(Carbon::now()->subDays(5)) }}</span>
-                                                        <span class="text-xs opacity-70">2:00 PM - 3:30 PM</span>
-                                                    </div>
-                                                </td>
-                                                <td>Michael Chen</td>
-                                                <td>
-                                                    <div class="badge badge-success">
-                                                        Completed
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <div class="dropdown dropdown-end">
-                                                        <div tabindex="0" role="button" class="btn btn-ghost btn-xs">
-                                                            <x-icon name="o-ellipsis-vertical" class="w-4 h-4" />
-                                                        </div>
-                                                        <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-                                                            <li><a>View Details</a></li>
-                                                            <li><a>View Recording</a></li>
-                                                            <li><a>View Notes</a></li>
-                                                        </ul>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
+                                            </thead>
+                                            <tbody>
+                                                @foreach($upcomingSessions as $session)
+                                                    <tr>
+                                                        <td class="font-medium">{{ $session['subject'] }}</td>
+                                                        <td>
+                                                            <div class="flex flex-col">
+                                                                <span>{{ $this->formatDate($session['start_time']) }}</span>
+                                                                <span class="text-xs opacity-70">{{ $this->formatTime($session['start_time']) }} - {{ $this->formatTime($session['end_time']) }}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td>{{ $session['teacher'] }}</td>
+                                                        <td>
+                                                            <div class="badge badge-info">
+                                                                Upcoming
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            <div class="dropdown dropdown-end">
+                                                                <div tabindex="0" role="button" class="btn btn-ghost btn-xs">
+                                                                    <x-icon name="o-ellipsis-vertical" class="w-4 h-4" />
+                                                                </div>
+                                                                <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
+                                                                    <li><a>View Details</a></li>
+                                                                    <li><a>Reschedule</a></li>
+                                                                    <li><a class="text-error">Cancel Session</a></li>
+                                                                </ul>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                @else
+                                    <div class="py-8 text-center">
+                                        <x-icon name="o-calendar" class="w-12 h-12 mx-auto mb-3 text-base-content/30" />
+                                        <h3 class="text-lg font-medium">No sessions found</h3>
+                                        <p class="mt-1 text-base-content/70">Schedule a session to start learning</p>
+                                        <a href="{{ route('parents.sessions.requests', ['child_id' => $child->id]) }}" class="mt-4 btn btn-primary">
+                                            <x-icon name="o-eye" class="w-4 h-4 mr-2" />
+                                            Schedule Session
+                                        </a>
+                                    </div>
+                                @endif
 
                                 <div class="flex justify-center mt-4">
                                     <a href="{{ route('parents.sessions.index', ['child_id' => $child->id]) }}" class="btn btn-outline btn-sm">
@@ -870,7 +928,7 @@ new class extends Component {
                                         <x-icon name="o-document-magnifying-glass" class="w-8 h-8" />
                                     </div>
                                     <div class="stat-title">Upcoming</div>
-                                    <div class="stat-value text-info">{{ rand(0, 3) }}</div>
+                                    <div class="stat-value text-info">0</div>
                                     <div class="stat-desc">Scheduled assessments</div>
                                 </div>
                             </div>
@@ -897,18 +955,18 @@ new class extends Component {
                                                     <tr>
                                                         <td class="font-medium">{{ $submission['title'] }}</td>
                                                         <td>
-                                                            <div class="badge {{ $getAssessmentTypeClass($submission['type']) }}">
+                                                            <div class="badge {{$this->getAssessmentTypeClass($submission['type']) }}">
                                                                 {{ ucfirst($submission['type']) }}
                                                             </div>
                                                         </td>
-                                                        <td>{{ $formatDate($submission['submission_date']) }}</td>
+                                                        <td>{{ $this->formatDate($submission['submission_date']) }}</td>
                                                         <td>
                                                             <div class="radial-progress text-{{ $submission['score'] >= 70 ? 'success' : ($submission['score'] >= 60 ? 'warning' : 'error') }}" style="--value:{{ $submission['score'] }}; --size: 2rem;">
                                                                 <span class="text-xs">{{ $submission['score'] }}%</span>
                                                             </div>
                                                         </td>
                                                         <td>
-                                                            <div class="badge {{ $getAssessmentStatusClass($submission['status']) }}">
+                                                            <div class="badge {{ $this->getAssessmentStatusClass($submission['status']) }}">
                                                                 {{ ucfirst(str_replace('_', ' ', $submission['status'])) }}
                                                             </div>
                                                         </td>
@@ -943,7 +1001,6 @@ new class extends Component {
                     <div class="shadow-xl card bg-base-100">
                         <div class="card-body">
                             <h3 class="mb-6 card-title">Learning Materials</h3>
-
                             <div class="flex justify-between mb-4">
                                 <div class="join">
                                     <button class="btn join-item btn-sm btn-active">All</button>
@@ -978,7 +1035,7 @@ new class extends Component {
                                                     <td>
                                                         <div class="flex items-center gap-3">
                                                             <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-base-200">
-                                                                <x-icon name="{{ $getMaterialIcon($material['type']) }}" class="w-5 h-5" />
+                                                                <x-icon name="{{ $this->getMaterialIcon($material['type']) }}" class="w-5 h-5" />
                                                             </div>
                                                             <div>
                                                                 <div class="font-medium">{{ $material['title'] }}</div>
@@ -987,7 +1044,7 @@ new class extends Component {
                                                         </div>
                                                     </td>
                                                     <td>{{ $material['subject'] }}</td>
-                                                    <td>{{ $getRelativeDate($material['date_added']) }}</td>
+                                                    <td>{{ $this->getRelativeDate($material['date_added']) }}</td>
                                                     <td>{{ $material['size'] }}</td>
                                                     <td>
                                                         <div class="flex gap-1">
@@ -1043,7 +1100,7 @@ new class extends Component {
                 </a>
 
                 <a href="{{ route('parents.sessions.requests', ['child_id' => $child->id]) }}" class="justify-start btn btn-outline btn-block">
-                    <x-icon name="o-calendar-plus" class="w-5 h-5 mr-3" />
+                    <x-icon name="o-eye" class="w-5 h-5 mr-3" />
                     Schedule New Session
                 </a>
 

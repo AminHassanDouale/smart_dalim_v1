@@ -87,19 +87,37 @@ new class extends Component {
 
     public function deleteCourse()
     {
-        // In a real app, you would delete the course
-        // Course::find($this->courseToDelete)->delete();
+        try {
+            $course = Course::findOrFail($this->courseToDelete);
 
-        // For now, show a toast message
-        $this->toast(
-            type: 'success',
-            title: 'Course deleted',
-            description: 'The course has been deleted successfully.',
-            position: 'toast-bottom toast-end',
-            icon: 'o-check-circle',
-            css: 'alert-success',
-            timeout: 3000
-        );
+            // Ensure course belongs to this teacher
+            if ($course->teacher_profile_id != $this->teacherProfile->id) {
+                throw new \Exception('You are not authorized to delete this course.');
+            }
+
+            // Delete the course
+            $course->delete();
+
+            $this->toast(
+                type: 'success',
+                title: 'Course deleted',
+                description: 'The course has been deleted successfully.',
+                position: 'toast-bottom toast-end',
+                icon: 'o-check-circle',
+                css: 'alert-success',
+                timeout: 3000
+            );
+        } catch (\Exception $e) {
+            $this->toast(
+                type: 'error',
+                title: 'Error',
+                description: 'There was an error deleting the course: ' . $e->getMessage(),
+                position: 'toast-bottom toast-end',
+                icon: 'o-x-circle',
+                css: 'alert-error',
+                timeout: 5000
+            );
+        }
 
         $this->showDeleteModal = false;
         $this->courseToDelete = null;
@@ -111,165 +129,37 @@ new class extends Component {
         $this->courseToDelete = null;
     }
 
-    // Get courses with pagination, filtering, and sorting
     public function getCoursesProperty()
     {
-        // In a real app, this would be a database query
-        // For now, we'll return mock data
-        return $this->getMockCourses();
-    }
+        // Get the teacher's courses from the database
+        $query = Course::query()
+            ->where('teacher_profile_id', $this->teacherProfile->id)
+            ->with(['subject', 'enrollments']); // Eager load the subject and enrollments relationships
 
-    private function getMockCourses()
-    {
-        $courses = collect([
-            [
-                'id' => 1,
-                'name' => 'Advanced Laravel Development',
-                'description' => 'Master advanced Laravel concepts including Middleware, Service Containers, and more.',
-                'level' => 'Advanced',
-                'subject_id' => 1,
-                'subject_name' => 'Laravel Development',
-                'teacher_profile_id' => $this->teacherProfile->id ?? 1,
-                'price' => 299.99,
-                'status' => 'active',
-                'students_count' => 12,
-                'max_students' => 20,
-                'start_date' => Carbon::now()->addDays(5)->format('Y-m-d'),
-                'end_date' => Carbon::now()->addMonths(3)->format('Y-m-d'),
-                'created_at' => Carbon::now()->subDays(30)->format('Y-m-d H:i:s'),
-                'updated_at' => Carbon::now()->subDays(5)->format('Y-m-d H:i:s'),
-                'curriculum' => [
-                    'Module 1: Advanced Routing',
-                    'Module 2: Service Containers and IoC',
-                    'Module 3: Custom Middleware',
-                    'Module 4: Advanced Eloquent',
-                    'Module 5: Final Project'
-                ],
-                'learning_outcomes' => [
-                    'Build complex Laravel applications',
-                    'Implement custom service providers',
-                    'Optimize database queries',
-                    'Create reusable packages'
-                ]
-            ],
-            [
-                'id' => 2,
-                'name' => 'React and Redux Masterclass',
-                'description' => 'Comprehensive guide to building scalable applications with React and Redux.',
-                'level' => 'Intermediate',
-                'subject_id' => 2,
-                'subject_name' => 'React Development',
-                'teacher_profile_id' => $this->teacherProfile->id ?? 1,
-                'price' => 249.99,
-                'status' => 'active',
-                'students_count' => 8,
-                'max_students' => 15,
-                'start_date' => Carbon::now()->addDays(10)->format('Y-m-d'),
-                'end_date' => Carbon::now()->addMonths(2)->format('Y-m-d'),
-                'created_at' => Carbon::now()->subDays(45)->format('Y-m-d H:i:s'),
-                'updated_at' => Carbon::now()->subDays(2)->format('Y-m-d H:i:s'),
-                'curriculum' => [
-                    'Module 1: React Fundamentals',
-                    'Module 2: React Hooks',
-                    'Module 3: Redux Basics',
-                    'Module 4: Advanced Redux',
-                    'Module 5: Testing React Applications'
-                ],
-                'learning_outcomes' => [
-                    'Build complex React applications',
-                    'Manage state with Redux',
-                    'Implement testing strategies',
-                    'Deploy React applications'
-                ]
-            ],
-            [
-                'id' => 3,
-                'name' => 'UI/UX Design Fundamentals',
-                'description' => 'Learn the principles of effective UI/UX design and implement them in real projects.',
-                'level' => 'Beginner',
-                'subject_id' => 3,
-                'subject_name' => 'UI/UX Design',
-                'teacher_profile_id' => $this->teacherProfile->id ?? 1,
-                'price' => 199.99,
-                'status' => 'draft',
-                'students_count' => 0,
-                'max_students' => 25,
-                'start_date' => Carbon::now()->addDays(20)->format('Y-m-d'),
-                'end_date' => Carbon::now()->addMonths(2)->format('Y-m-d'),
-                'created_at' => Carbon::now()->subDays(10)->format('Y-m-d H:i:s'),
-                'updated_at' => Carbon::now()->subDays(10)->format('Y-m-d H:i:s'),
-                'curriculum' => [
-                    'Module 1: Design Principles',
-                    'Module 2: Color Theory',
-                    'Module 3: Typography',
-                    'Module 4: User Research',
-                    'Module 5: Prototyping'
-                ],
-                'learning_outcomes' => [
-                    'Create effective user interfaces',
-                    'Conduct user research',
-                    'Build interactive prototypes',
-                    'Implement design systems'
-                ]
-            ],
-            [
-                'id' => 4,
-                'name' => 'Mobile Development with Flutter',
-                'description' => 'Build cross-platform mobile applications with Flutter and Dart.',
-                'level' => 'Intermediate',
-                'subject_id' => 4,
-                'subject_name' => 'Mobile Development',
-                'teacher_profile_id' => $this->teacherProfile->id ?? 1,
-                'price' => 279.99,
-                'status' => 'inactive',
-                'students_count' => 5,
-                'max_students' => 20,
-                'start_date' => Carbon::now()->addDays(-60)->format('Y-m-d'),
-                'end_date' => Carbon::now()->addDays(-5)->format('Y-m-d'),
-                'created_at' => Carbon::now()->subDays(90)->format('Y-m-d H:i:s'),
-                'updated_at' => Carbon::now()->subDays(65)->format('Y-m-d H:i:s'),
-                'curriculum' => [
-                    'Module 1: Dart Programming',
-                    'Module 2: Flutter Basics',
-                    'Module 3: State Management',
-                    'Module 4: Advanced Widgets',
-                    'Module 5: Publishing Apps'
-                ],
-                'learning_outcomes' => [
-                    'Build cross-platform mobile apps',
-                    'Implement complex UI designs',
-                    'Manage application state',
-                    'Publish to app stores'
-                ]
-            ],
-        ]);
-
-        // Apply filters
+        // Apply status filter
         if ($this->statusFilter) {
-            $courses = $courses->filter(function($course) {
-                return $course['status'] === $this->statusFilter;
-            });
+            $query->where('status', $this->statusFilter);
         }
 
+        // Apply subject filter
         if ($this->subjectFilter) {
-            $courses = $courses->filter(function($course) {
-                return $course['subject_id'] == $this->subjectFilter;
-            });
+            $query->where('subject_id', $this->subjectFilter);
         }
 
+        // Apply search filter
         if ($this->searchQuery) {
-            $query = strtolower($this->searchQuery);
-            $courses = $courses->filter(function($course) use ($query) {
-                return str_contains(strtolower($course['name']), $query) ||
-                       str_contains(strtolower($course['description']), $query) ||
-                       str_contains(strtolower($course['subject_name']), $query);
+            $searchTerm = '%' . $this->searchQuery . '%';
+            $query->where(function($q) use ($searchTerm) {
+                $q->where('name', 'like', $searchTerm)
+                  ->orWhere('description', 'like', $searchTerm);
             });
         }
 
         // Apply sorting
-        $courses = $courses->sortBy($this->sortBy, SORT_REGULAR, $this->sortDirection === 'desc');
+        $query->orderBy($this->sortBy, $this->sortDirection);
 
-        return $courses->values()->all();
+        // Return paginated results directly without transforming to array
+        return $query->paginate(9);
     }
 
     // Format date
@@ -296,18 +186,41 @@ new class extends Component {
     // Get stats for course dashboard
     public function getStatsProperty()
     {
+        // If teacherProfile isn't loaded, return empty stats
+        if (!$this->teacherProfile) {
+            return [
+                'total' => 0,
+                'active' => 0,
+                'draft' => 0,
+                'inactive' => 0,
+                'total_students' => 0
+            ];
+        }
+
+        // Query for total counts
+        $totalCourses = Course::where('teacher_profile_id', $this->teacherProfile->id)->count();
+        $activeCourses = Course::where('teacher_profile_id', $this->teacherProfile->id)
+                            ->where('status', 'active')
+                            ->count();
+        $draftCourses = Course::where('teacher_profile_id', $this->teacherProfile->id)
+                           ->where('status', 'draft')
+                           ->count();
+        $inactiveCourses = Course::where('teacher_profile_id', $this->teacherProfile->id)
+                              ->where('status', 'inactive')
+                              ->count();
+
+        // Count total students enrolled in teacher's courses
+        $totalStudents = Course::where('teacher_profile_id', $this->teacherProfile->id)
+                           ->withCount('enrollments')
+                           ->get()
+                           ->sum('enrollments_count');
+
         return [
-            'total' => count($this->getMockCourses()),
-            'active' => count(array_filter($this->getMockCourses(), function($course) {
-                return $course['status'] === 'active';
-            })),
-            'draft' => count(array_filter($this->getMockCourses(), function($course) {
-                return $course['status'] === 'draft';
-            })),
-            'inactive' => count(array_filter($this->getMockCourses(), function($course) {
-                return $course['status'] === 'inactive';
-            })),
-            'total_students' => array_sum(array_column($this->getMockCourses(), 'students_count'))
+            'total' => $totalCourses,
+            'active' => $activeCourses,
+            'draft' => $draftCourses,
+            'inactive' => $inactiveCourses,
+            'total_students' => $totalStudents
         ];
     }
 
@@ -336,7 +249,6 @@ new class extends Component {
         ");
     }
 }; ?>
-
 <div class="p-6">
     <div class="mx-auto max-w-7xl">
         <!-- Header Section -->
@@ -443,32 +355,32 @@ new class extends Component {
                                 <div class="p-6">
                                     <div class="flex items-start justify-between mb-3">
                                         <div>
-                                            <h3 class="text-lg font-bold">{{ $course['name'] }}</h3>
-                                            <p class="text-sm text-base-content/70">{{ $course['subject_name'] }}</p>
+                                            <h3 class="text-lg font-bold">{{ $course->name }}</h3>
+                                            <p class="text-sm text-base-content/70">{{ $course->subject->name }}</p>
                                         </div>
-                                        <div class="badge {{ $this->getStatusBadgeClass($course['status']) }}">
-                                            {{ ucfirst($course['status']) }}
+                                        <div class="badge {{ $this->getStatusBadgeClass($course->status) }}">
+                                            {{ ucfirst($course->status) }}
                                         </div>
                                     </div>
 
-                                    <p class="mb-4 text-sm line-clamp-2">{{ $course['description'] }}</p>
+                                    <p class="mb-4 text-sm line-clamp-2">{{ $course->description }}</p>
 
                                     <div class="grid grid-cols-2 gap-2 mb-4">
                                         <div>
                                             <div class="text-xs text-base-content/70">Level</div>
-                                            <div class="text-sm font-medium">{{ $course['level'] }}</div>
+                                            <div class="text-sm font-medium">{{ ucfirst($course->level) }}</div>
                                         </div>
                                         <div>
                                             <div class="text-xs text-base-content/70">Price</div>
-                                            <div class="text-sm font-medium">${{ number_format($course['price'], 2) }}</div>
+                                            <div class="text-sm font-medium">${{ number_format($course->price, 2) }}</div>
                                         </div>
                                         <div>
                                             <div class="text-xs text-base-content/70">Students</div>
-                                            <div class="text-sm font-medium">{{ $course['students_count'] }}/{{ $course['max_students'] }}</div>
+                                            <div class="text-sm font-medium">{{ $course->enrollments->count() }}/{{ $course->max_students }}</div>
                                         </div>
                                         <div>
                                             <div class="text-xs text-base-content/70">Start Date</div>
-                                            <div class="text-sm font-medium">{{ $this->formatDate($course['start_date']) }}</div>
+                                            <div class="text-sm font-medium">{{ $this->formatDate($course->start_date) }}</div>
                                         </div>
                                     </div>
 
@@ -476,33 +388,33 @@ new class extends Component {
                                     <div class="mb-4">
                                         <div class="flex items-center justify-between mb-1">
                                             <span class="text-xs">Enrollment</span>
-                                            <span class="text-xs font-medium">{{ round(($course['students_count'] / $course['max_students']) * 100) }}%</span>
+                                            <span class="text-xs font-medium">{{ $course->max_students > 0 ? round(($course->enrollments->count() / $course->max_students) * 100) : 0 }}%</span>
                                         </div>
                                         <div class="h-2 overflow-hidden rounded-full bg-base-300">
                                             <div
                                                 class="h-full bg-primary"
-                                                style="width: {{ ($course['students_count'] / $course['max_students']) * 100 }}%"
+                                                style="width: {{ $course->max_students > 0 ? ($course->enrollments->count() / $course->max_students) * 100 : 0 }}%"
                                             ></div>
                                         </div>
                                     </div>
 
                                     <div class="flex flex-wrap justify-end gap-2 mt-auto">
-                                        <a
-                                            href="{{ route('teachers.courses.show', $course['id']) }}"
+                                        
+                                           <a href="{{ route('teachers.courses.show', $course->id) }}"
                                             class="btn btn-sm btn-outline"
                                         >
                                             <x-icon name="o-eye" class="w-4 h-4 mr-1" />
                                             View
                                         </a>
-                                        <a
-                                            href="{{ route('teachers.courses.edit', $course['id']) }}"
+                                        
+                                        <a    href="{{ route('teachers.courses.edit', $course->id) }}"
                                             class="btn btn-sm btn-outline"
                                         >
                                             <x-icon name="o-pencil-square" class="w-4 h-4 mr-1" />
                                             Edit
                                         </a>
                                         <button
-                                            wire:click="confirmDelete({{ $course['id'] }})"
+                                            wire:click="confirmDelete({{ $course->id }})"
                                             class="btn btn-sm btn-outline btn-error"
                                         >
                                             <x-icon name="o-trash" class="w-4 h-4 mr-1" />
@@ -512,6 +424,11 @@ new class extends Component {
                                 </div>
                             </div>
                         @endforeach
+                    </div>
+                    
+                    <!-- Pagination Links -->
+                    <div class="py-4 mt-6">
+                        {{ $this->courses->links() }}
                     </div>
                 </div>
             @else

@@ -67,12 +67,16 @@ new class extends Component {
     public $formMode = 'wizard'; // 'wizard' or 'compact'
 
     public $todayDate;
+    
+    // Current child ID from query string
+    public $childId = null;
 
     protected $queryString = [
         'statusFilter' => ['except' => ''],
         'dateRangeFilter' => ['except' => 'all'],
         'searchQuery' => ['except' => ''],
         'page' => ['except' => 1],
+        'childId' => ['except' => null, 'as' => 'child_id'],
     ];
 
     protected $rules = [
@@ -109,7 +113,9 @@ new class extends Component {
         $this->children = $this->user->parentProfile->children()->get();
 
         // Set default selected child if available
-        if ($this->children->count() > 0 && !$this->selectedChild) {
+        if ($this->childId && $this->children->contains('id', $this->childId)) {
+            $this->selectedChild = $this->childId;
+        } elseif ($this->children->count() > 0 && !$this->selectedChild) {
             $this->selectedChild = $this->children->first()->id;
         }
 
@@ -123,9 +129,9 @@ new class extends Component {
 
         // Initialize filters for dependent dropdowns
         $this->updateFilteredOptions();
-
-        // Initialize mock data
-        $this->initializeMockData();
+        
+        // Initialize cost estimate
+        $this->updateCostEstimate();
     }
 
     public function updated($field)
@@ -148,9 +154,6 @@ new class extends Component {
 
     private function updateFilteredOptions()
     {
-        // In a real app, you would fetch these from the database based on the selected child
-        // For demo, use mock data
-
         if ($this->selectedChild) {
             $child = $this->children->firstWhere('id', $this->selectedChild);
 
@@ -168,7 +171,7 @@ new class extends Component {
                     $this->selectedSubject = $this->filteredSubjects->first()->id;
                 }
 
-                // Get teachers based on child and subject
+                // Get teachers based on subject
                 $this->updateFilteredTeachers();
             }
         }
@@ -176,24 +179,28 @@ new class extends Component {
 
     private function updateFilteredTeachers()
     {
-        // In a real app, you would fetch teachers who teach the selected subject
-        // For demo, create mock data
-
         $this->filteredTeachers = [];
 
         if ($this->selectedSubject) {
-            // Get 3-5 random users with the 'teacher' role
+            // Get teachers who teach the selected subject
             $this->filteredTeachers = User::where('role', 'teacher')
-                ->take(rand(3, 5))
+                ->whereHas('teacherProfile.subjects', function($query) {
+                    $query->where('subjects.id', $this->selectedSubject);
+                })
                 ->get();
+                
+            // If no specific teachers are found, get general teachers
+            if ($this->filteredTeachers->isEmpty()) {
+                $this->filteredTeachers = User::where('role', 'teacher')
+                    ->take(3)
+                    ->get();
+            }
         }
     }
 
     private function updateCostEstimate()
     {
-        // In a real app, you would calculate based on actual rates
-        // For demo, use a simple formula
-
+        // Calculate based on duration and session type
         $baseRate = 40; // $40 per hour
         $hourlyRate = $baseRate * ($this->sessionDuration / 60);
 
@@ -229,32 +236,15 @@ new class extends Component {
 
     private function generateAvailableSlots()
     {
-        // In a real app, you would check actual teacher availability
-        // For demo, generate random available slots
-
         $this->availableSlots = [];
 
         if ($this->selectedSubject && $this->sessionDate) {
             $date = Carbon::parse($this->sessionDate);
-
-            // Generate 5-10 random time slots
-            $slots = [];
-            $startHour = 8; // 8 AM
-            $endHour = 19; // 7 PM
-
-            for ($i = 0; $i < rand(5, 10); $i++) {
-                $hour = rand($startHour, $endHour);
-                $minute = rand(0, 1) * 30; // 0 or 30 minutes
-
-                $time = sprintf("%02d:%02d", $hour, $minute);
-
-                if (!in_array($time, $slots)) {
-                    $slots[] = $time;
-                }
-            }
-
-            sort($slots);
-
+            
+            // In a real app, we would check teacher availability here
+            // For now, generate some reasonable time slots
+            $slots = ['08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+            
             foreach ($slots as $time) {
                 $this->availableSlots[] = [
                     'date' => $date->format('Y-m-d'),
@@ -266,24 +256,31 @@ new class extends Component {
             }
         }
 
-        // Generate 2-3 recommended slots
-        $this->recommendedSlots = collect($this->availableSlots)->random(min(3, count($this->availableSlots)))->toArray();
+        // Generate up to 3 recommended slots
+        $count = min(3, count($this->availableSlots));
+        if ($count > 0) {
+            $this->recommendedSlots = array_slice($this->availableSlots, 0, $count);
+        } else {
+            $this->recommendedSlots = [];
+        }
     }
 
     public function selectRecommendedSlot($index)
     {
-        $slot = $this->recommendedSlots[$index];
-        $this->sessionDate = $slot['date'];
-        $this->sessionTime = $slot['time'];
+        if (isset($this->recommendedSlots[$index])) {
+            $slot = $this->recommendedSlots[$index];
+            $this->sessionDate = $slot['date'];
+            $this->sessionTime = $slot['time'];
 
-        // Find teacher by name
-        if ($this->filteredTeachers->isNotEmpty()) {
-            $teacher = $this->filteredTeachers->firstWhere('name', $slot['teacher']);
-            if ($teacher) {
-                $this->selectedTeacher = $teacher->id;
+            // Find teacher by name
+            if ($this->filteredTeachers->isNotEmpty()) {
+                $teacher = $this->filteredTeachers->firstWhere('name', $slot['teacher']);
+                if ($teacher) {
+                    $this->selectedTeacher = $teacher->id;
+                }
             }
         }
-
+        
         $this->showRecommendedSlotsModal = false;
     }
 
@@ -351,8 +348,8 @@ new class extends Component {
         // Update cost estimate
         $this->updateCostEstimate();
 
-        // In a real app, you would save the request to the database
-        // For demo, just show success message
+        // In a real app, you would create a new LearningSession here
+        // For now, just show success message
         $this->showSuccessModal = true;
 
         // Reset form
@@ -376,36 +373,39 @@ new class extends Component {
         $this->currentStep = 1;
     }
 
-    private function initializeMockData()
-    {
-        // Generate some mock session request history
-        // In a real app, this would come from the database
-
-        $this->updateCostEstimate();
-    }
-
     public function viewRequestDetail($requestId)
     {
-        // In a real app, fetch the request details from the database
-        // For demo, use mock data
-
-        $this->selectedRequest = [
-            'id' => $requestId,
-            'child_name' => $this->children->isNotEmpty() ? $this->children->random()->name : 'Child',
-            'subject' => Subject::inRandomOrder()->first()->name,
-            'status' => collect(['pending', 'approved', 'completed', 'cancelled'])->random(),
-            'created_at' => Carbon::now()->subDays(rand(1, 30)),
-            'date' => Carbon::now()->addDays(rand(1, 14))->format('Y-m-d'),
-            'time' => sprintf("%02d:%02d", rand(8, 18), rand(0, 1) * 30),
-            'duration' => collect([30, 60, 90, 120])->random(),
-            'location' => collect(['Online', 'Home', 'Learning Center'])->random(),
-            'notes' => 'This is a sample session request note.',
-            'teacher' => User::where('role', 'teacher')->inRandomOrder()->first()->name,
-            'cost' => $this->costEstimate,
-            'type' => collect(['one-time', 'recurring', 'package'])->random(),
-        ];
-
-        $this->showRequestDetailModal = true;
+        // Find the session request
+        $session = LearningSession::with(['subject', 'teacher'])
+            ->find($requestId);
+            
+        if ($session) {
+            $childName = '';
+            foreach ($this->children as $child) {
+                if ($child->id == $session->children_id) {
+                    $childName = $child->name;
+                    break;
+                }
+            }
+            
+            $this->selectedRequest = [
+                'id' => $session->id,
+                'child_name' => $childName,
+                'subject' => $session->subject->name,
+                'status' => $session->status,
+                'created_at' => $session->created_at,
+                'date' => $session->start_time->format('Y-m-d'),
+                'time' => $session->start_time->format('H:i'),
+                'duration' => $session->duration_minutes,
+                'location' => $session->location,
+                'notes' => $session->notes,
+                'teacher' => $session->teacher ? $session->teacher->name : 'Not assigned yet',
+                'cost' => $session->cost,
+                'type' => $session->recurring ? 'recurring' : 'one-time',
+            ];
+            
+            $this->showRequestDetailModal = true;
+        }
     }
 
     public function closeRequestDetailModal()
@@ -435,17 +435,22 @@ new class extends Component {
 
     public function cancelRequest($requestId)
     {
-        // In a real app, update the request status in the database
-        // For demo, just show success message
-        $this->toast(
-            type: 'success',
-            title: 'Request Cancelled',
-            description: 'The session request has been cancelled successfully.',
-            position: 'toast-bottom toast-end',
-            icon: 'o-check-circle',
-            css: 'alert-success',
-            timeout: 3000
-        );
+        // Find and update the session status
+        $session = LearningSession::find($requestId);
+        if ($session) {
+            $session->status = 'cancelled';
+            $session->save();
+            
+            $this->toast(
+                type: 'success',
+                title: 'Request Cancelled',
+                description: 'The session request has been cancelled successfully.',
+                position: 'toast-bottom toast-end',
+                icon: 'o-check-circle',
+                css: 'alert-success',
+                timeout: 3000
+            );
+        }
 
         $this->requestToCancel = null;
     }
@@ -457,101 +462,75 @@ new class extends Component {
 
     public function getRequestsProperty()
     {
-        // In a real app, fetch requests from the database based on filters
-        // For demo, generate mock data
-
-        $requests = [];
-
-        for ($i = 1; $i <= 10; $i++) {
-            $status = collect(['pending', 'approved', 'completed', 'cancelled'])->random();
-            $date = Carbon::now()->addDays(rand(-30, 30));
-
-            $request = [
-                'id' => $i,
-                'child_name' => $this->children->isNotEmpty() ? $this->children->random()->name : 'Child ' . $i,
-                'subject' => Subject::inRandomOrder()->first()->name,
-                'status' => $status,
-                'created_at' => Carbon::now()->subDays(rand(1, 30)),
-                'date' => $date->format('Y-m-d'),
-                'time' => sprintf("%02d:%02d", rand(8, 18), rand(0, 1) * 30),
-                'teacher' => $status !== 'pending' ? User::where('role', 'teacher')->inRandomOrder()->first()->name : null,
-            ];
-
-            // Apply filters
-            $includeRequest = true;
-
-            if ($this->statusFilter && $request['status'] !== $this->statusFilter) {
-                $includeRequest = false;
-            }
-
-            if ($this->dateRangeFilter !== 'all') {
-                $requestDate = Carbon::parse($request['date']);
-
-                if ($this->dateRangeFilter === 'past' && $requestDate->isFuture()) {
-                    $includeRequest = false;
-                } elseif ($this->dateRangeFilter === 'upcoming' && $requestDate->isPast()) {
-                    $includeRequest = false;
-                } elseif ($this->dateRangeFilter === 'this-week' && !$requestDate->isCurrentWeek()) {
-                    $includeRequest = false;
-                } elseif ($this->dateRangeFilter === 'this-month' && !$requestDate->isCurrentMonth()) {
-                    $includeRequest = false;
-                }
-            }
-
-            if ($this->searchQuery) {
-                $searchQuery = strtolower($this->searchQuery);
-                $matchesSearch = false;
-
-                if (str_contains(strtolower($request['child_name']), $searchQuery) ||
-                    str_contains(strtolower($request['subject']), $searchQuery) ||
-                    ($request['teacher'] && str_contains(strtolower($request['teacher']), $searchQuery))) {
-                    $matchesSearch = true;
-                }
-
-                if (!$matchesSearch) {
-                    $includeRequest = false;
-                }
-            }
-
-            if ($includeRequest) {
-                $requests[] = $request;
+        // Start with a query builder to get all sessions for the parent's children
+        $query = LearningSession::whereIn('children_id', $this->children->pluck('id'))
+            ->with(['subject', 'teacher']);
+            
+        // Apply status filter
+        if ($this->statusFilter) {
+            $query->where('status', $this->statusFilter);
+        }
+        
+        // Apply date filter
+        if ($this->dateRangeFilter !== 'all') {
+            if ($this->dateRangeFilter === 'past') {
+                $query->where('start_time', '<', Carbon::now());
+            } elseif ($this->dateRangeFilter === 'upcoming') {
+                $query->where('start_time', '>', Carbon::now());
+            } elseif ($this->dateRangeFilter === 'this-week') {
+                $query->whereBetween('start_time', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]);
+            } elseif ($this->dateRangeFilter === 'this-month') {
+                $query->whereBetween('start_time', [Carbon::now()->startOfMonth(), Carbon::now()->endOfMonth()]);
             }
         }
-
+        
+        // Apply search
+        if ($this->searchQuery) {
+            $searchQuery = '%' . $this->searchQuery . '%';
+            $query->where(function($q) use ($searchQuery) {
+                $q->whereHas('subject', function($subjectQuery) use ($searchQuery) {
+                    $subjectQuery->where('name', 'LIKE', $searchQuery);
+                })
+                ->orWhereHas('teacher', function($teacherQuery) use ($searchQuery) {
+                    $teacherQuery->where('name', 'LIKE', $searchQuery);
+                });
+            });
+        }
+        
         // Apply sorting
         if ($this->sortBy === 'date') {
-            usort($requests, function($a, $b) {
-                $dateA = Carbon::parse($a['date']);
-                $dateB = Carbon::parse($b['date']);
-                return $this->sortDir === 'asc' ? $dateA <=> $dateB : $dateB <=> $dateA;
-            });
+            $query->orderBy('start_time', $this->sortDir);
         } elseif ($this->sortBy === 'created_at') {
-            usort($requests, function($a, $b) {
-                $dateA = Carbon::parse($a['created_at']);
-                $dateB = Carbon::parse($b['created_at']);
-                return $this->sortDir === 'asc' ? $dateA <=> $dateB : $dateB <=> $dateA;
-            });
+            $query->orderBy('created_at', $this->sortDir);
         } elseif ($this->sortBy === 'status') {
-            usort($requests, function($a, $b) {
-                return $this->sortDir === 'asc' ?
-                    strcmp($a['status'], $b['status']) :
-                    strcmp($b['status'], $a['status']);
-            });
+            $query->orderBy('status', $this->sortDir);
         }
-
-        return collect($requests)->paginate(5);
+        
+        // Get paginated results
+        return $query->paginate(5);
     }
 
     public function getRequestStatsProperty()
     {
-        // In a real app, fetch stats from the database
-        // For demo, generate mock stats
-
+        // Get real session statistics
+        $childrenIds = $this->children->pluck('id');
+        
         return [
-            'pending' => rand(1, 5),
-            'approved' => rand(3, 10),
-            'completed' => rand(15, 30),
-            'cancelled' => rand(0, 3),
+            'pending' => LearningSession::whereIn('children_id', $childrenIds)
+                ->where('status', 'pending')
+                ->count(),
+                
+            'approved' => LearningSession::whereIn('children_id', $childrenIds)
+                ->where('status', 'approved')
+                ->count(),
+                
+            'completed' => LearningSession::whereIn('children_id', $childrenIds)
+                ->where('status', 'completed')
+                ->count(),
+                
+            'cancelled' => LearningSession::whereIn('children_id', $childrenIds)
+                ->where('status', 'cancelled')
+                ->count(),
         ];
     }
 
@@ -593,7 +572,7 @@ new class extends Component {
             });
         ");
     }
-}; ?>
+};?>
 
 <div>
     <div class="p-6">

@@ -6,11 +6,12 @@ use Illuminate\Database\Seeder;
 use App\Models\User;
 use App\Models\ParentProfile;
 use App\Models\TeacherProfile;
+use App\Models\Subject;
 use Illuminate\Support\Facades\Hash;
 
 class UserSeeder extends Seeder
 {
-   /**
+    /**
      * Run the database seeds.
      */
     public function run(): void
@@ -68,5 +69,61 @@ class UserSeeder extends Seeder
             ],
             'has_completed_profile' => true,
         ]);
+
+        // Create regular teacher users
+        for ($i = 1; $i <= 5; $i++) {
+            $user = User::create([
+                'name' => fake()->name(),
+                'email' => "teacher{$i}@example.com",
+                'password' => Hash::make('password'),
+                'role' => User::ROLE_TEACHER,
+                'username' => "teacher{$i}",
+                'email_verified_at' => now(), // This ensures the account is verified
+            ]);
+
+            // Create teacher profile with empty fields
+            // This is based on your request to make all attributes empty and take data from teacher data
+            $teacherProfile = TeacherProfile::create([
+                'user_id' => $user->id,
+                'whatsapp' => '', // Empty as requested
+                'phone' => '', // Empty as requested
+                'place_of_birth' => '', // Empty as requested
+                'has_completed_profile' => true,
+                'status' => 'submitted' // Based on your error message, this seems to be the status format
+            ]);
+
+            // Get random subject IDs (assuming you have subjects already seeded)
+            $subjectIds = Subject::inRandomOrder()->limit(fake()->numberBetween(1, 3))->pluck('id');
+
+            // Attach subjects to teacher if there are any
+            if ($subjectIds->count() > 0) {
+                $teacherProfile->subjects()->attach($subjectIds);
+            }
+        }
+
+        // Create a demo teacher account
+        $demoTeacher = User::create([
+            'name' => 'Demo Teacher',
+            'email' => 'demoteacher@example.com',
+            'password' => Hash::make('password'),
+            'role' => User::ROLE_TEACHER,
+            'username' => 'demoteacher',
+            'email_verified_at' => now(),
+        ]);
+
+        $demoTeacherProfile = TeacherProfile::create([
+            'user_id' => $demoTeacher->id,
+            'whatsapp' => '', // Empty as requested
+            'phone' => '', // Empty as requested
+            'place_of_birth' => '', // Empty as requested
+            'has_completed_profile' => true,
+            'status' => 'approved' // This demo teacher is fully approved
+        ]);
+
+        // Attach subjects to demo teacher
+        $demoSubjectIds = Subject::inRandomOrder()->limit(3)->pluck('id');
+        if ($demoSubjectIds->count() > 0) {
+            $demoTeacherProfile->subjects()->attach($demoSubjectIds);
+        }
     }
 }

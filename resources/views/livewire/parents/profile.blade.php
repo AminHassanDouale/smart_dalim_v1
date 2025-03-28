@@ -6,6 +6,7 @@ use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use App\Models\ParentProfile;
 use App\Models\User;
 use Carbon\Carbon;
@@ -16,6 +17,8 @@ new class extends Component {
     public $user;
     public $parentProfile;
     public $children = [];
+    // Add this with your other property declarations
+public $privacySettings = [];
 
     // Tab state
     public $activeTab = 'profile';
@@ -46,6 +49,13 @@ new class extends Component {
         'newsletter_subscription' => true,
     ];
 
+    // Notification preferences
+    public $notificationPreferences = [];
+
+    // Status message for notifications
+    public $statusMessage = '';
+    public $showNotification = false;
+
     // Stats data
     public $stats = [
         'total_children' => 0,
@@ -63,11 +73,24 @@ new class extends Component {
     {
         $this->user = Auth::user();
         $this->parentProfile = $this->user->parentProfile;
-        $this->children = $this->parentProfile->children ?? collect([]);
 
+        // Load children first since other methods depend on it
+        $this->children = $this->parentProfile ? $this->parentProfile->children : collect([]);
+
+        Log::info('ParentProfile component mounted', [
+            'user_id' => $this->user->id,
+            'parent_profile_exists' => $this->parentProfile ? 'yes' : 'no',
+            'children_count' => $this->children->count()
+        ]);
+
+        // Load data in order
         $this->loadProfileData();
+        $this->loadNotificationPreferences();
+        $this->loadPrivacySettings();
+        // These depend on children being loaded
         $this->loadStats();
         $this->loadRecentActivity();
+
     }
 
     public function loadProfileData()
@@ -88,96 +111,212 @@ new class extends Component {
                 'areas_of_interest' => $this->parentProfile->areas_of_interest ?? [],
                 'newsletter_subscription' => $this->parentProfile->newsletter_subscription ?? true,
             ];
+
+            Log::info('Profile data loaded', ['user_id' => $this->user->id]);
+        } else {
+            Log::warning('No parent profile found for user', ['user_id' => $this->user->id]);
+        }
+    }
+
+    public function loadNotificationPreferences()
+    {
+        if ($this->parentProfile) {
+            // Get the notification preferences from the model or use defaults
+            $this->notificationPreferences = $this->parentProfile->notification_preferences ?:
+                ParentProfile::getDefaultNotificationPreferences();
+
+            Log::info('Notification preferences loaded', [
+                'user_id' => $this->user->id,
+                'preferences' => $this->notificationPreferences
+            ]);
+        } else {
+            Log::warning('No parent profile found for notification preferences', [
+                'user_id' => $this->user->id
+            ]);
+
+            // Use default preferences
+            $this->notificationPreferences = ParentProfile::getDefaultNotificationPreferences();
         }
     }
 
     public function loadStats()
     {
-        // In a real app, these would be calculated from database queries
+        // Replace random stats with actual database queries
+    if ($this->parentProfile) {
+        // Get children count
+        $totalChildren = $this->children->count();
+
+        // Get total sessions from database
+        $totalSessions = 0;
+        foreach ($this->children as $child) {
+            $totalSessions += $child->learningSessions()->count();
+        }
+
+        // Get unique teachers assigned to children
+        $teacherIds = [];
+        foreach ($this->children as $child) {
+            if ($child->teacher_id) {
+                $teacherIds[] = $child->teacher_id;
+            }
+        }
+        $activeTeachers = count(array_unique($teacherIds));
+
+        // Get upcoming sessions
+        $upcomingSessions = 0;
+        foreach ($this->children as $child) {
+            $upcomingSessions += $child->learningSessions()
+                ->where('start_time', '>', now())
+                ->where('status', 'scheduled')
+                ->count();
+        }
+
+        // Get materials count
+        $materials = 0;
+        foreach ($this->children as $child) {
+            $materials += $child->materials()->count();
+        }
+
+        // Account age calculation
+        $accountAge = $this->user->created_at
+            ? Carbon::parse($this->user->created_at)->diffInDays(now())
+            : 0;
+
         $this->stats = [
-            'total_children' => $this->children->count(),
-            'total_sessions' => rand(15, 50),
-            'active_teachers' => rand(1, 5),
-            'upcoming_sessions' => rand(2, 10),
-            'total_materials' => rand(10, 30),
+            'total_children' => $totalChildren,
+            'total_sessions' => $totalSessions,
+            'active_teachers' => $activeTeachers,
+            'upcoming_sessions' => $upcomingSessions,
+            'total_materials' => $materials,
+            'account_age_days' => $accountAge
+        ];
+    } else {
+        // Default empty stats if no profile exists
+        $this->stats = [
+            'total_children' => 0,
+            'total_sessions' => 0,
+            'active_teachers' => 0,
+            'upcoming_sessions' => 0,
+            'total_materials' => 0,
             'account_age_days' => $this->user->created_at
                 ? Carbon::parse($this->user->created_at)->diffInDays(now())
                 : 0
         ];
     }
+    }
 
     public function loadRecentActivity()
     {
-        // In a real app, these would be fetched from the database
-        $activities = [
-            'session_attended', 'profile_updated', 'child_added',
-            'session_scheduled', 'homework_submitted', 'material_downloaded'
-        ];
 
+    if (!$this->parentProfile) {
         $this->recentActivity = [];
+        return;
+    }
 
-        for ($i = 0; $i < 5; $i++) {
-            $activity = $activities[array_rand($activities)];
-            $daysAgo = rand(0, 10);
+    $activities = [];
 
-            $childName = $this->children->count() > 0
-                ? $this->children[rand(0, $this->children->count() - 1)]->name ?? 'Your child'
-                : 'Your child';
+    // Add profile updates activity
+    $profileActivity = $this->parentProfile->updated_at && $this->parentProfile->updated_at->gt($this->parentProfile->created_at)
+        ? [
+            'type' => 'profile_updated',
+            'description' => "You updated your profile information",
+            'date' => $this->parentProfile->updated_at->format('M d, Y'),
+            'time_ago' => $this->parentProfile->updated_at->diffForHumans(),
+            'icon' => 'o-user',
+            'color' => 'bg-info text-info-content'
+        ]
+        : null;
 
-            $description = match($activity) {
-                'session_attended' => "$childName attended a learning session",
-                'profile_updated' => "You updated your profile information",
-                'child_added' => "You added $childName to your account",
-                'session_scheduled' => "New session scheduled for $childName",
-                'homework_submitted' => "$childName submitted homework assignment",
-                'material_downloaded' => "You downloaded learning materials",
-                default => "Activity recorded"
-            };
+    if ($profileActivity) {
+        $activities[] = $profileActivity;
+    }
 
-            $icon = match($activity) {
-                'session_attended' => 'o-academic-cap',
-                'profile_updated' => 'o-user',
-                'child_added' => 'o-user-plus',
-                'session_scheduled' => 'o-calendar',
-                'homework_submitted' => 'o-document-text',
-                'material_downloaded' => 'o-arrow-down-tray',
-                default => 'o-bell'
-            };
+    // Get child additions
+    foreach ($this->children as $child) {
+        $activities[] = [
+            'type' => 'child_added',
+            'description' => "You added {$child->name} to your account",
+            'date' => $child->created_at->format('M d, Y'),
+            'time_ago' => $child->created_at->diffForHumans(),
+            'icon' => 'o-user-plus',
+            'color' => 'bg-success text-success-content'
+        ];
+    }
 
-            $color = match($activity) {
-                'session_attended' => 'bg-primary text-primary-content',
-                'profile_updated' => 'bg-info text-info-content',
-                'child_added' => 'bg-success text-success-content',
-                'session_scheduled' => 'bg-secondary text-secondary-content',
-                'homework_submitted' => 'bg-accent text-accent-content',
-                'material_downloaded' => 'bg-neutral text-neutral-content',
-                default => 'bg-base-300'
-            };
+    // Get recent learning sessions
+    foreach ($this->children as $child) {
+        $recentSessions = $child->learningSessions()
+            ->with(['subject'])
+            ->latest('start_time')
+            ->limit(3)
+            ->get();
 
-            $this->recentActivity[] = [
-                'type' => $activity,
+        foreach ($recentSessions as $session) {
+            $activityType = $session->status === 'completed' ? 'session_attended' : 'session_scheduled';
+            $subjectName = $session->subject ? $session->subject->name : 'a subject';
+
+            $description = $session->status === 'completed'
+                ? "{$child->name} attended a {$subjectName} session"
+                : "New {$subjectName} session scheduled for {$child->name}";
+
+            $icon = $session->status === 'completed' ? 'o-academic-cap' : 'o-calendar';
+            $color = $session->status === 'completed'
+                ? 'bg-primary text-primary-content'
+                : 'bg-secondary text-secondary-content';
+
+            $activities[] = [
+                'type' => $activityType,
                 'description' => $description,
-                'date' => Carbon::now()->subDays($daysAgo)->format('M d, Y'),
-                'time_ago' => Carbon::now()->subDays($daysAgo)->diffForHumans(),
+                'date' => $session->start_time->format('M d, Y'),
+                'time_ago' => $session->start_time->diffForHumans(),
                 'icon' => $icon,
                 'color' => $color
             ];
         }
+    }
 
-        // Sort by most recent
-        usort($this->recentActivity, function($a, $b) {
-            return strtotime($b['date']) - strtotime($a['date']);
-        });
+    // Get homework submissions if available
+    foreach ($this->children as $child) {
+        if (method_exists($child, 'homeworkSubmissions')) {
+            $submissions = $child->homeworkSubmissions()
+                ->latest()
+                ->limit(2)
+                ->get();
+
+            foreach ($submissions as $submission) {
+                $activities[] = [
+                    'type' => 'homework_submitted',
+                    'description' => "{$child->name} submitted homework assignment",
+                    'date' => $submission->created_at->format('M d, Y'),
+                    'time_ago' => $submission->created_at->diffForHumans(),
+                    'icon' => 'o-document-text',
+                    'color' => 'bg-accent text-accent-content'
+                ];
+            }
+        }
+    }
+
+    // Sort by most recent
+    usort($activities, function($a, $b) {
+        return strtotime($b['date']) - strtotime($a['date']);
+    });
+
+    // Limit to most recent 5 activities
+    $this->recentActivity = array_slice($activities, 0, 5);
     }
 
     public function setActiveTab($tab)
     {
         $this->activeTab = $tab;
+        Log::info('Active tab changed', ['tab' => $tab, 'user_id' => $this->user->id]);
     }
 
     public function toggleEditBasicInfo()
     {
         $this->isEditingBasicInfo = !$this->isEditingBasicInfo;
+        Log::info('Toggled basic info editing', [
+            'user_id' => $this->user->id,
+            'isEditing' => $this->isEditingBasicInfo
+        ]);
 
         if (!$this->isEditingBasicInfo) {
             $this->loadProfileData();
@@ -187,6 +326,10 @@ new class extends Component {
     public function toggleEditContactInfo()
     {
         $this->isEditingContactInfo = !$this->isEditingContactInfo;
+        Log::info('Toggled contact info editing', [
+            'user_id' => $this->user->id,
+            'isEditing' => $this->isEditingContactInfo
+        ]);
 
         if (!$this->isEditingContactInfo) {
             $this->loadProfileData();
@@ -196,141 +339,346 @@ new class extends Component {
     public function toggleEditPreferences()
     {
         $this->isEditingPreferences = !$this->isEditingPreferences;
+        Log::info('Toggled preferences editing', [
+            'user_id' => $this->user->id,
+            'isEditing' => $this->isEditingPreferences
+        ]);
 
         if (!$this->isEditingPreferences) {
             $this->loadProfileData();
         }
     }
 
-    public function saveBasicInfo()
-    {
-        $this->validate([
-            'formData.name' => 'required|min:2',
-            'formData.email' => 'required|email',
-            'formData.phone_number' => 'required|min:10',
+    public function loadPrivacySettings()
+{
+    if ($this->parentProfile) {
+        $this->privacySettings = $this->parentProfile->privacy_settings ?:
+            ParentProfile::getDefaultPrivacySettings();
+
+        Log::info('Privacy settings loaded', [
+            'user_id' => $this->user->id,
+            'settings' => $this->privacySettings
+        ]);
+    } else {
+        Log::warning('No parent profile found for privacy settings', [
+            'user_id' => $this->user->id
         ]);
 
-        $this->user->update([
-            'name' => $this->formData['name'],
-            'email' => $this->formData['email'],
+        // Use default settings
+        $this->privacySettings = ParentProfile::getDefaultPrivacySettings();
+    }
+}
+
+public function savePrivacySettings()
+{
+    try {
+        Log::info('Attempting to save privacy settings', [
+            'user_id' => $this->user->id,
+            'settings' => $this->privacySettings
         ]);
 
         if ($this->parentProfile) {
-            $this->parentProfile->update([
-                'phone_number' => $this->formData['phone_number'],
+            $this->parentProfile->updatePrivacySettings($this->privacySettings);
+
+            $this->showNotification = true;
+            $this->statusMessage = 'Privacy settings updated successfully';
+
+            // Record this activity
+            $this->loadRecentActivity(); // Reload activity data after update
+
+            Log::info('Privacy settings saved successfully', [
+                'user_id' => $this->user->id
             ]);
         } else {
             // Create parent profile if it doesn't exist
             $this->parentProfile = ParentProfile::create([
                 'user_id' => $this->user->id,
-                'phone_number' => $this->formData['phone_number'],
-                'has_completed_profile' => true
+                'privacy_settings' => $this->privacySettings,
+                'has_completed_profile' => false
+            ]);
+
+            $this->showNotification = true;
+            $this->statusMessage = 'Privacy settings saved successfully';
+
+            Log::info('Created new parent profile with privacy settings', [
+                'user_id' => $this->user->id,
+                'profile_id' => $this->parentProfile->id
             ]);
         }
+    } catch (\Exception $e) {
+        Log::error('Error saving privacy settings', [
+            'user_id' => $this->user->id,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
 
-        $this->isEditingBasicInfo = false;
-        $this->dispatchBrowserEvent('profile-updated', ['message' => 'Basic information updated successfully']);
+        $this->showNotification = true;
+        $this->statusMessage = 'Error updating privacy settings: ' . $e->getMessage();
+    }
+}
+
+    public function updateNotificationPreference($channel, $type, $value)
+    {
+        // Update the local state
+        $this->notificationPreferences[$channel][$type] = $value;
+
+        Log::info('Notification preference updated', [
+            'user_id' => $this->user->id,
+            'channel' => $channel,
+            'type' => $type,
+            'value' => $value
+        ]);
+    }
+
+    public function saveNotificationPreferences()
+    {
+        try {
+            Log::info('Attempting to save notification preferences', [
+                'user_id' => $this->user->id,
+                'preferences' => $this->notificationPreferences
+            ]);
+
+            if ($this->parentProfile) {
+                $this->parentProfile->updateNotificationPreferences($this->notificationPreferences);
+
+                $this->showNotification = true;
+                $this->statusMessage = 'Notification preferences updated successfully';
+
+                Log::info('Notification preferences saved successfully', [
+                    'user_id' => $this->user->id
+                ]);
+            } else {
+                // Create parent profile if it doesn't exist
+                $this->parentProfile = ParentProfile::create([
+                    'user_id' => $this->user->id,
+                    'notification_preferences' => $this->notificationPreferences,
+                    'has_completed_profile' => false
+                ]);
+
+                $this->showNotification = true;
+                $this->statusMessage = 'Notification preferences saved successfully';
+
+                Log::info('Created new parent profile with notification preferences', [
+                    'user_id' => $this->user->id,
+                    'profile_id' => $this->parentProfile->id
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error saving notification preferences', [
+                'user_id' => $this->user->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            $this->showNotification = true;
+            $this->statusMessage = 'Error updating notification preferences: ' . $e->getMessage();
+        }
+    }
+
+    public function saveBasicInfo()
+    {
+        try {
+            Log::info('Attempting to save basic info', ['user_id' => $this->user->id]);
+
+            $this->validate([
+                'formData.name' => 'required|min:2',
+                'formData.email' => 'required|email',
+                'formData.phone_number' => 'required|min:10',
+            ]);
+
+            $this->user->update([
+                'name' => $this->formData['name'],
+                'email' => $this->formData['email'],
+            ]);
+
+            if ($this->parentProfile) {
+                $this->parentProfile->update([
+                    'phone_number' => $this->formData['phone_number'],
+                ]);
+            } else {
+                // Create parent profile if it doesn't exist
+                $this->parentProfile = ParentProfile::create([
+                    'user_id' => $this->user->id,
+                    'phone_number' => $this->formData['phone_number'],
+                    'has_completed_profile' => true,
+                    'notification_preferences' => ParentProfile::getDefaultNotificationPreferences()
+                ]);
+
+                Log::info('Created new parent profile', ['user_id' => $this->user->id, 'profile_id' => $this->parentProfile->id]);
+            }
+
+            $this->isEditingBasicInfo = false;
+            $this->showNotification = true;
+            $this->statusMessage = 'Basic information updated successfully';
+
+            Log::info('Basic information saved successfully', ['user_id' => $this->user->id]);
+        } catch (\Exception $e) {
+            Log::error('Error saving basic info', [
+                'user_id' => $this->user->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            $this->showNotification = true;
+            $this->statusMessage = 'Error updating information: ' . $e->getMessage();
+        }
     }
 
     public function saveContactInfo()
     {
-        $this->validate([
-            'formData.address' => 'required',
-            'formData.city' => 'required',
-            'formData.state' => 'required',
-            'formData.postal_code' => 'required',
-            'formData.country' => 'required',
-        ]);
+        try {
+            Log::info('Attempting to save contact info', ['user_id' => $this->user->id]);
 
-        if ($this->parentProfile) {
-            $this->parentProfile->update([
-                'address' => $this->formData['address'],
-                'city' => $this->formData['city'],
-                'state' => $this->formData['state'],
-                'postal_code' => $this->formData['postal_code'],
-                'country' => $this->formData['country'],
+            $this->validate([
+                'formData.address' => 'required',
+                'formData.city' => 'required',
+                'formData.state' => 'required',
+                'formData.postal_code' => 'required',
+                'formData.country' => 'required',
             ]);
-        }
 
-        $this->isEditingContactInfo = false;
-        $this->dispatchBrowserEvent('profile-updated', ['message' => 'Contact information updated successfully']);
+            if ($this->parentProfile) {
+                $this->parentProfile->update([
+                    'address' => $this->formData['address'],
+                    'city' => $this->formData['city'],
+                    'state' => $this->formData['state'],
+                    'postal_code' => $this->formData['postal_code'],
+                    'country' => $this->formData['country'],
+                ]);
+
+                Log::info('Contact information saved successfully', ['user_id' =>$this->user->id]);
+            } else {
+                Log::error('No parent profile found to update contact info', ['user_id' => $this->user->id]);
+            }
+
+            $this->isEditingContactInfo = false;
+            $this->showNotification = true;
+            $this->statusMessage = 'Contact information updated successfully';
+        } catch (\Exception $e) {
+            Log::error('Error saving contact info', [
+                'user_id' => $this->user->id,
+                'error' => $e->getMessage()
+            ]);
+
+            $this->showNotification = true;
+            $this->statusMessage = 'Error updating information: ' . $e->getMessage();
+        }
     }
 
     public function savePreferences()
     {
-        $this->validate([
-            'formData.preferred_communication_method' => 'required',
-            'formData.preferred_session_times' => 'array',
-            'formData.areas_of_interest' => 'array',
-        ]);
+        try {
+            Log::info('Attempting to save preferences', ['user_id' => $this->user->id]);
 
-        if ($this->parentProfile) {
-            $this->parentProfile->update([
-                'preferred_communication_method' => $this->formData['preferred_communication_method'],
-                'preferred_session_times' => $this->formData['preferred_session_times'],
-                'areas_of_interest' => $this->formData['areas_of_interest'],
-                'newsletter_subscription' => $this->formData['newsletter_subscription'],
+            $this->validate([
+                'formData.preferred_communication_method' => 'required',
+                'formData.preferred_session_times' => 'array',
+                'formData.areas_of_interest' => 'array',
             ]);
-        }
 
-        $this->isEditingPreferences = false;
-        $this->dispatchBrowserEvent('profile-updated', ['message' => 'Preferences updated successfully']);
+            if ($this->parentProfile) {
+                $this->parentProfile->update([
+                    'preferred_communication_method' => $this->formData['preferred_communication_method'],
+                    'preferred_session_times' => $this->formData['preferred_session_times'],
+                    'areas_of_interest' => $this->formData['areas_of_interest'],
+                    'newsletter_subscription' => $this->formData['newsletter_subscription'],
+                ]);
+
+                Log::info('Preferences saved successfully', ['user_id' => $this->user->id]);
+            } else {
+                Log::error('No parent profile found to update preferences', ['user_id' => $this->user->id]);
+            }
+
+            $this->isEditingPreferences = false;
+            $this->showNotification = true;
+            $this->statusMessage = 'Preferences updated successfully';
+        } catch (\Exception $e) {
+            Log::error('Error saving preferences', [
+                'user_id' => $this->user->id,
+                'error' => $e->getMessage()
+            ]);
+
+            $this->showNotification = true;
+            $this->statusMessage = 'Error updating preferences: ' . $e->getMessage();
+        }
     }
 
     public function openProfilePhotoModal()
     {
         $this->showProfilePhotoModal = true;
+        Log::info('Profile photo modal opened', ['user_id' => $this->user->id]);
     }
 
     public function closeProfilePhotoModal()
     {
         $this->showProfilePhotoModal = false;
         $this->newProfilePhoto = null;
+        Log::info('Profile photo modal closed', ['user_id' => $this->user->id]);
     }
 
     public function saveProfilePhoto()
     {
-        $this->validate([
-            'newProfilePhoto' => 'required|image|max:1024', // 1MB Max
-        ]);
+        try {
+            Log::info('Attempting to save profile photo', ['user_id' => $this->user->id]);
 
-        $photoPath = $this->newProfilePhoto->store('profile-photos', 'public');
+            $this->validate([
+                'newProfilePhoto' => 'required|image|max:1024', // 1MB Max
+            ]);
 
-        if ($this->parentProfile) {
-            // Delete old photo if exists
-            if ($this->parentProfile->profile_photo_path) {
-                Storage::disk('public')->delete($this->parentProfile->profile_photo_path);
+            $photoPath = $this->newProfilePhoto->store('profile-photos', 'public');
+
+            if ($this->parentProfile) {
+                // Delete old photo if exists
+                if ($this->parentProfile->profile_photo_path) {
+                    Storage::disk('public')->delete($this->parentProfile->profile_photo_path);
+                }
+
+                $this->parentProfile->update([
+                    'profile_photo_path' => $photoPath,
+                ]);
+
+                Log::info('Profile photo saved successfully', [
+                    'user_id' => $this->user->id,
+                    'photo_path' => $photoPath
+                ]);
+            } else {
+                Log::error('No parent profile found to update profile photo', ['user_id' => $this->user->id]);
             }
 
-            $this->parentProfile->update([
-                'profile_photo_path' => $photoPath,
+            $this->closeProfilePhotoModal();
+            $this->showNotification = true;
+            $this->statusMessage = 'Profile photo updated successfully';
+        } catch (\Exception $e) {
+            Log::error('Error saving profile photo', [
+                'user_id' => $this->user->id,
+                'error' => $e->getMessage()
             ]);
-        }
 
-        $this->closeProfilePhotoModal();
-        $this->dispatchBrowserEvent('profile-updated', ['message' => 'Profile photo updated successfully']);
+            $this->showNotification = true;
+            $this->statusMessage = 'Error updating profile photo: ' . $e->getMessage();
+        }
     }
 
     public function downloadData()
     {
+        Log::info('Data download requested', ['user_id' => $this->user->id]);
         // In a real app, you would generate a downloadable file with user data
-        $this->dispatchBrowserEvent('profile-updated', ['message' => 'Your data is being prepared for download. You will receive an email when it\'s ready.']);
+        $this->showNotification = true;
+        $this->statusMessage = 'Your data is being prepared for download. You will receive an email when it\'s ready.';
+    }
+
+    public function hideNotification()
+    {
+        $this->showNotification = false;
+        Log::info('Notification hidden', ['user_id' => $this->user->id]);
     }
 }; ?>
 
 <div
     x-data="{
-        showNotification: false,
-        notificationMessage: '',
-        showNotificationFor(message, duration = 3000) {
-            this.notificationMessage = message;
-            this.showNotification = true;
-            setTimeout(() => {
-                this.showNotification = false;
-            }, duration);
-        }
+        showNotification: @entangle('showNotification'),
+        notificationMessage: @entangle('statusMessage')
     }"
-    x-on:profile-updated.window="showNotificationFor($event.detail.message)"
 >
     <!-- Notification Toast -->
     <div
@@ -343,9 +691,12 @@ new class extends Component {
         x-transition:leave-end="opacity-0 transform scale-90"
         class="fixed z-50 max-w-sm shadow-lg top-4 right-4 alert alert-success"
     >
-        <div>
-            <x-icon name="o-check-circle" class="w-6 h-6" />
-            <span x-text="notificationMessage">Profile updated!</span>
+        <div class="flex justify-between w-full">
+            <div class="flex">
+                <x-icon name="o-check-circle" class="w-6 h-6" />
+                <span x-text="notificationMessage">Profile updated!</span>
+            </div>
+            <button @click="$wire.hideNotification()" class="btn btn-sm btn-ghost">×</button>
         </div>
     </div>
 
@@ -366,7 +717,7 @@ new class extends Component {
                             <div class="relative group">
                                 <div class="avatar">
                                     <div class="w-24 h-24 rounded-full bg-base-300">
-                                        @if($parentProfile && $parentProfile->profile_photo_path)
+                                        @if($parentProfile && $parentProfile->profile_photo_path && Storage::disk('public')->exists($parentProfile->profile_photo_path))
                                             <img src="{{ Storage::url($parentProfile->profile_photo_path) }}" alt="{{ $user->name }}" />
                                         @else
                                             <div class="flex items-center justify-center w-full h-full text-3xl font-semibold text-base-content/30">
@@ -404,10 +755,10 @@ new class extends Component {
                                     <span>Security Settings</span>
                                 </button>
 
-                                <button class="gap-2 btn btn-outline btn-sm" wire:click="setActiveTab('notifications')">
+                                <a href="{{ route('parents.notification-preferences') }}" class="gap-2 btn btn-outline btn-sm">
                                     <x-icon name="o-bell" class="w-4 h-4" />
-                                    <span>Notification Preferences</span>
-                                </button>
+                                    <span>Notification Settings</span>
+                                </a>
 
                                 <button class="gap-2 btn btn-outline btn-sm" wire:click="setActiveTab('privacy')">
                                     <x-icon name="o-shield-check" class="w-4 h-4" />
@@ -597,6 +948,7 @@ new class extends Component {
                         <!-- Contact Information Card -->
                         <div class="mt-6 shadow-xl card bg-base-100">
                             <div class="card-body">
+                                <!-- Rest of the component code... -->
                                 <div class="flex items-center justify-between mb-4">
                                     <h3 class="text-lg card-title">Contact Information</h3>
                                     <button
@@ -1134,7 +1486,11 @@ new class extends Component {
                                                     <span class="block">Share progress data with teachers</span>
                                                     <span class="text-xs text-base-content/70">Allow teachers to view your child's learning progress</span>
                                                 </div>
-                                                <input type="checkbox" checked class="toggle toggle-primary" />
+                                                <input
+                                                    type="checkbox"
+                                                    wire:model.live="privacySettings.share_progress_with_teachers"
+                                                    class="toggle toggle-primary"
+                                                />
                                             </label>
 
                                             <label class="flex items-center justify-between cursor-pointer">
@@ -1142,7 +1498,11 @@ new class extends Component {
                                                     <span class="block">Anonymous analytics</span>
                                                     <span class="text-xs text-base-content/70">Share anonymous usage data to improve our services</span>
                                                 </div>
-                                                <input type="checkbox" checked class="toggle toggle-primary" />
+                                                <input
+                                                    type="checkbox"
+                                                    wire:model.live="privacySettings.anonymous_analytics"
+                                                    class="toggle toggle-primary"
+                                                />
                                             </label>
                                         </div>
                                     </div>
@@ -1182,9 +1542,12 @@ new class extends Component {
                                 </div>
 
                                 <div class="justify-end mt-4 card-actions">
-                                    <button class="btn btn-primary">
-                                        Save Privacy Settings
-                                    </button>
+                                  <button
+    wire:click="savePrivacySettings"
+    class="btn btn-primary"
+>
+    Save Privacy Settings
+</button>
                                 </div>
                             </div>
                         </div>

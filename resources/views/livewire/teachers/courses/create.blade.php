@@ -86,14 +86,21 @@ new class extends Component {
 
     public function mount()
     {
+        \Log::info('Mounting course create component');
         $this->user = Auth::user();
         $this->teacherProfile = $this->user->teacherProfile;
+
+        if (!$this->teacherProfile) {
+            \Log::warning('Teacher profile not found for user', ['user_id' => $this->user->id]);
+        }
 
         // Set default dates
         $this->startDate = Carbon::now()->addWeek()->format('Y-m-d');
         $this->endDate = Carbon::now()->addWeeks(9)->format('Y-m-d');
 
+        \Log::info('Loading subjects for teacher');
         $this->loadSubjects();
+        \Log::info('Loaded subjects', ['count' => count($this->availableSubjects)]);
     }
 
     public function loadSubjects()
@@ -198,6 +205,7 @@ new class extends Component {
     // Validate current step
     protected function validateCurrentStep()
     {
+        \Log::info('Validating step', ['step' => $this->currentStep]);
         $rules = [];
 
         switch ($this->currentStep) {
@@ -240,81 +248,131 @@ new class extends Component {
                 break;
         }
 
-        $this->validate($rules);
+        try {
+            $this->validate($rules);
+            \Log::info('Step validation passed', ['step' => $this->currentStep]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Validation failed for step', [
+                'step' => $this->currentStep,
+                'errors' => $e->errors()
+            ]);
+            throw $e;
+        }
     }
 
     // Submit the form
-    public function submit()
-    {
+  // Update the submit method to include detailed logging
+public function submit()
+{
+    try {
+        \Log::info('Starting course creation process');
         $this->validateCurrentStep();
+        \Log::info('Current step validation passed');
 
         // Validate all fields before final submission
         $this->validate();
+        \Log::info('All form validation passed');
 
         // Filter out empty prerequisites
         $filteredPrerequisites = array_filter($this->prerequisites, function($item) {
             return !empty($item);
         });
+        \Log::info('Filtered prerequisites', ['count' => count($filteredPrerequisites)]);
 
-        try {
-            // In a real application, this would save to the database
-            // For now, we'll just simulate success
+        // Log form data before submission
+        \Log::info('Form data being submitted', [
+            'name' => $this->name,
+            'slug' => $this->slug,
+            'description' => substr($this->description, 0, 100) . '...',
+            'level' => $this->level,
+            'duration' => $this->duration,
+            'price' => $this->price,
+            'subject_id' => $this->subjectId,
+            'teacher_profile_id' => $this->teacherProfile ? $this->teacherProfile->id : null,
+            'modules_count' => count($this->modules),
+            'max_students' => $this->maxStudents,
+            'start_date' => $this->startDate,
+            'end_date' => $this->endDate,
+            'has_cover_image' => $this->coverImage ? true : false
+        ]);
 
-            // Create course (commented out actual database operation)
-            /*
-            $course = Course::create([
-                'name' => $this->name,
-                'slug' => $this->slug,
-                'description' => $this->description,
-                'level' => $this->level,
-                'duration' => $this->duration,
-                'price' => $this->price,
-                'subject_id' => $this->subjectId,
-                'teacher_profile_id' => $this->teacherProfile->id,
-                'curriculum' => $this->modules,
-                'prerequisites' => $filteredPrerequisites,
-                'learning_outcomes' => $this->outcomes,
-                'max_students' => $this->maxStudents,
-                'start_date' => $this->startDate,
-                'end_date' => $this->endDate,
-                'status' => 'draft'
-            ]);
+        // Check if teacher profile exists
+        if (!$this->teacherProfile) {
+            \Log::error('Teacher profile not found for user', ['user_id' => $this->user->id]);
+            throw new \Exception('Teacher profile not found. Please complete your profile first.');
+        }
 
-            // Handle cover image upload
-            if ($this->coverImage) {
+        // Create course
+        $course = Course::create([
+            'name' => $this->name,
+            'slug' => $this->slug,
+            'description' => $this->description,
+            'level' => $this->level,
+            'duration' => $this->duration,
+            'price' => $this->price,
+            'subject_id' => $this->subjectId,
+            'teacher_profile_id' => $this->teacherProfile->id,
+            'curriculum' => $this->modules,
+            'prerequisites' => $filteredPrerequisites,
+            'learning_outcomes' => $this->outcomes,
+            'max_students' => $this->maxStudents,
+            'start_date' => $this->startDate,
+            'end_date' => $this->endDate,
+            'status' => 'draft'
+        ]);
+
+        \Log::info('Course created successfully', ['course_id' => $course->id]);
+
+        // Handle cover image upload
+        if ($this->coverImage) {
+            \Log::info('Uploading cover image');
+            try {
                 $imagePath = $this->coverImage->storePublicly('course-covers', 'public');
                 $course->cover_image = $imagePath;
                 $course->save();
+                \Log::info('Cover image uploaded successfully', ['path' => $imagePath]);
+            } catch (\Exception $imageException) {
+                \Log::error('Cover image upload failed', [
+                    'error' => $imageException->getMessage(),
+                    'course_id' => $course->id
+                ]);
+                // Don't rethrow - course creation was successful, image is optional
             }
-            */
-
-            // Show success message
-            $this->toast(
-                type: 'success',
-                title: 'Course created',
-                description: 'Your course has been created successfully.',
-                position: 'toast-bottom toast-end',
-                icon: 'o-check-circle',
-                css: 'alert-success',
-                timeout: 3000
-            );
-
-            // Redirect to courses index
-            return redirect()->route('teachers.courses');
-
-        } catch (\Exception $e) {
-            // Show error message
-            $this->toast(
-                type: 'error',
-                title: 'Error',
-                description: 'There was an error creating your course: ' . $e->getMessage(),
-                position: 'toast-bottom toast-end',
-                icon: 'o-x-circle',
-                css: 'alert-error',
-                timeout: 5000
-            );
         }
+
+        // Show success message
+        $this->toast(
+            type: 'success',
+            title: 'Course created',
+            description: 'Your course has been created successfully.',
+            position: 'toast-bottom toast-end',
+            icon: 'o-check-circle',
+            css: 'alert-success',
+            timeout: 3000
+        );
+
+        \Log::info('Course creation completed, redirecting to courses list');
+        // Redirect to courses index
+        return redirect()->route('teachers.courses');
+
+    } catch (\Exception $e) {
+        \Log::error('Course creation failed', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        // Show error message
+        $this->toast(
+            type: 'error',
+            title: 'Error',
+            description: 'There was an error creating your course: ' . $e->getMessage(),
+            position: 'toast-bottom toast-end',
+            icon: 'o-x-circle',
+            css: 'alert-error',
+            timeout: 5000
+        );
     }
+}
 
     // Calculate progress percentage
     public function getProgressPercentage()

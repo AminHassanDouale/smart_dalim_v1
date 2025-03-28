@@ -211,52 +211,85 @@ new class extends Component {
     }
 
     public function getSessionsProperty()
-    {
-        // In a real app, fetch learning sessions from the database
-        // This example simulates sessions for the display period
-        $sessions = collect();
+{
+    // Get date bounds for the query
+    $startDate = reset($this->displayDates);
+    $endDate = end($this->displayDates);
 
-        // Get date bounds for the query
-        $startDate = reset($this->displayDates);
-        $endDate = end($this->displayDates);
-
-        if ($startDate && $endDate) {
-            // In a real app, this would be a database query
-            // LearningSession::where('teacher_id', $this->teacher->id)
-            //    ->whereBetween('start_time', [$startDate->startOfDay(), $endDate->endOfDay()])
-            //    ->get();
-
-            // For now, generate some sample sessions
-            $sessions = $this->getMockSessions($startDate, $endDate);
-        }
-
-        // Apply filters if set
-        if ($this->subjectFilter) {
-            $sessions = $sessions->filter(function($session) {
-                return $session['subject_id'] == $this->subjectFilter;
-            });
-        }
-
-        if ($this->courseFilter) {
-            $sessions = $sessions->filter(function($session) {
-                return $session['course_id'] == $this->courseFilter;
-            });
-        }
-
-        if ($this->studentFilter) {
-            $sessions = $sessions->filter(function($session) {
-                return $session['student_id'] == $this->studentFilter;
-            });
-        }
-
-        if ($this->statusFilter) {
-            $sessions = $sessions->filter(function($session) {
-                return $session['status'] == $this->statusFilter;
-            });
-        }
-
-        return $sessions;
+    if (!$startDate || !$endDate) {
+        return collect();
     }
+
+    // Start building the query
+    $query = LearningSession::where('teacher_id', $this->teacher->id)
+        ->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()]);
+
+    // Apply filters if set
+    if ($this->subjectFilter) {
+        $query->where('subject_id', $this->subjectFilter);
+    }
+
+    if ($this->courseFilter) {
+        $query->where('course_id', $this->courseFilter);
+    }
+
+    if ($this->studentFilter) {
+        $query->where('children_id', $this->studentFilter);
+    }
+
+    if ($this->statusFilter) {
+        $query->where('status', $this->statusFilter);
+    }
+
+    // Execute the query
+    $sessions = $query->get();
+
+    // Transform session data to the format expected by the view
+    return $sessions->map(function ($session) {
+        // Create Carbon instances for the timestamps
+        $startTime = $session->date->copy()->setTimeFromTimeString($session->start_time);
+        $endTime = $session->date->copy()->setTimeFromTimeString($session->end_time);
+        
+        // Get subject name
+        $subjectName = '';
+        if ($session->subject_id) {
+            $subject = collect($this->availableSubjects)->firstWhere('id', $session->subject_id);
+            if ($subject) {
+                $subjectName = $subject['name'];
+            } else if ($session->subject) {
+                $subjectName = $session->subject->name;
+            }
+        }
+        
+        // Get student name
+        $studentName = '';
+        if ($session->children_id) {
+            $student = collect($this->availableStudents)->firstWhere('id', $session->children_id);
+            if ($student) {
+                $studentName = $student['name'];
+            } else if ($session->student) {
+                $studentName = $session->student->name;
+            }
+        }
+        
+        return [
+            'id' => $session->id,
+            'teacher_id' => $session->teacher_id,
+            'subject_id' => $session->subject_id,
+            'subject_name' => $subjectName ?: 'Unknown Subject',
+            'student_id' => $session->children_id,
+            'student_name' => $studentName ?: 'Unknown Student',
+            'course_id' => $session->course_id,
+            'start_time' => $startTime,
+            'end_time' => $endTime,
+            'status' => $session->status,
+            'title' => $session->title ?: ($subjectName . ' with ' . $studentName),
+            'location' => $session->location ?: 'Online',
+            'attended' => $session->attendances()->count() > 0,
+            'notes' => $session->notes
+        ];
+    });
+}
 
     private function getMockSessions($startDate, $endDate)
     {
@@ -384,18 +417,21 @@ new class extends Component {
     public function scheduleSession()
     {
         $this->validate();
-
-        // In a real app, this would create a new session in the database
-        // For example:
-        // LearningSession::create([
-        //     'teacher_id' => $this->teacher->id,
-        //     'children_id' => $this->sessionStudent,
-        //     'subject_id' => $this->sessionSubject,
-        //     'start_time' => Carbon::parse($this->sessionDate . ' ' . $this->sessionStartTime),
-        //     'end_time' => Carbon::parse($this->sessionDate . ' ' . $this->sessionEndTime),
-        //     'status' => 'scheduled'
-        // ]);
-
+    
+        // Create a new session in the database
+        LearningSession::create([
+            'teacher_id' => $this->teacher->id,
+            'children_id' => $this->sessionStudent,
+            'subject_id' => $this->sessionSubject,
+            'course_id' => $this->sessionCourse ?: null,
+            'date' => $this->sessionDate,
+            'start_time' => $this->sessionStartTime,
+            'end_time' => $this->sessionEndTime,
+            'title' => $this->getSessionTitle(),
+            'status' => 'scheduled',
+            'location' => 'Online'
+        ]);
+    
         // Show success toast
         $this->toast(
             type: 'success',
@@ -406,21 +442,99 @@ new class extends Component {
             css: 'alert-success',
             timeout: 3000
         );
-
+    
         $this->showSessionModal = false;
+    }
+    
+    // Helper method to generate a title for the session
+    private function getSessionTitle()
+    {
+        $subjectName = '';
+        $studentName = '';
+        
+        // Get subject name
+        if ($this->sessionSubject) {
+            $subject = collect($this->availableSubjects)->firstWhere('id', $this->sessionSubject);
+            if ($subject) {
+                $subjectName = $subject['name'];
+            }
+        }
+        
+        // Get student name
+        if ($this->sessionStudent) {
+            $student = collect($this->availableStudents)->firstWhere('id', $this->sessionStudent);
+            if ($student) {
+                $studentName = $student['name'];
+            }
+        }
+        
+        if ($subjectName && $studentName) {
+            return "$subjectName with $studentName";
+        } elseif ($subjectName) {
+            return "$subjectName Session";
+        } else {
+            return "Teaching Session";
+        }
     }
 
     public function viewSessionDetails($sessionId)
     {
-        // In a real app, fetch session from database
-        // $this->selectedSession = LearningSession::find($sessionId);
-
-        // For now, find the session in our mock data
+        // Find the session in our processed collection
         $this->selectedSession = $this->sessions->firstWhere('id', $sessionId);
-
+    
+        // If not found in the collection, try loading from the database
+        if (!$this->selectedSession) {
+            $session = LearningSession::find($sessionId);
+            
+            if ($session) {
+                // Get subject name
+                $subjectName = '';
+                if ($session->subject_id) {
+                    $subject = Subject::find($session->subject_id);
+                    if ($subject) {
+                        $subjectName = $subject->name;
+                    }
+                }
+                
+                // Get student name
+                $studentName = '';
+                if ($session->children_id) {
+                    $student = User::find($session->children_id);
+                    if ($student) {
+                        $studentName = $student->name;
+                    }
+                }
+                
+                // Create Carbon instances for the timestamps
+                $startTime = $session->date ? 
+                    Carbon::parse($session->date->toDateString() . ' ' . $session->start_time) : 
+                    Carbon::parse($session->start_time);
+                    
+                $endTime = $session->date ? 
+                    Carbon::parse($session->date->toDateString() . ' ' . $session->end_time) : 
+                    Carbon::parse($session->end_time);
+                
+                $this->selectedSession = [
+                    'id' => $session->id,
+                    'teacher_id' => $session->teacher_id,
+                    'subject_id' => $session->subject_id,
+                    'subject_name' => $subjectName ?: 'Unknown Subject',
+                    'student_id' => $session->children_id,
+                    'student_name' => $studentName ?: 'Unknown Student',
+                    'course_id' => $session->course_id,
+                    'start_time' => $startTime,
+                    'end_time' => $endTime,
+                    'status' => $session->status,
+                    'title' => $session->title ?: ($subjectName . ' with ' . $studentName),
+                    'location' => $session->location ?: 'Online',
+                    'attended' => $session->attendances()->count() > 0,
+                    'notes' => $session->notes
+                ];
+            }
+        }
+    
         $this->showSessionDetailsModal = true;
     }
-
     public function deleteSession()
     {
         if (!$this->selectedSession) {
@@ -493,16 +607,16 @@ new class extends Component {
         foreach ($this->sessions as $session) {
             $sessionStart = $session['start_time'];
             $sessionEnd = $session['end_time'];
-
+    
             // Check if the date matches
             if ($sessionStart->toDateString() !== $date->toDateString()) {
                 continue;
             }
-
+    
             // Check if the time slot falls within the session
             $slotStart = Carbon::parse($date->toDateString() . ' ' . $timeSlot);
             $slotEnd = (clone $slotStart)->addMinutes(30);
-
+    
             if (
                 ($slotStart >= $sessionStart && $slotStart < $sessionEnd) ||
                 ($slotEnd > $sessionStart && $slotEnd <= $sessionEnd) ||
@@ -511,10 +625,9 @@ new class extends Component {
                 return $session;
             }
         }
-
+    
         return false;
     }
-
     public function isAvailableSlot($date, $timeSlot)
     {
         // Check if the date is in the available days

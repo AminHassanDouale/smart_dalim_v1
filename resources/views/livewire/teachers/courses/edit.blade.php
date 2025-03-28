@@ -72,7 +72,7 @@ new class extends Component {
     {
         return [
             'name' => 'required|string|min:5|max:100',
-            'slug' => 'required|string|max:100|unique:courses,slug,' . $this->course['id'],
+            'slug' => 'required|string|max:100|unique:courses,slug,' . $this->course->id,
             'description' => 'required|string|min:20',
             'level' => 'required|string|in:beginner,intermediate,advanced,all',
             'duration' => 'required|integer|min:1|max:52',
@@ -99,28 +99,41 @@ new class extends Component {
 
     public function mount($course)
     {
+        \Log::info('Mounting course edit component', ['course_id' => $course]);
+        
         $this->user = Auth::user();
         $this->teacherProfile = $this->user->teacherProfile;
 
-        // In a real app, fetch the course from database
-        $this->course = $this->getMockCourse($course);
+        // Fetch the course from database
+        $this->course = Course::with(['subject'])->findOrFail($course);
+        
+        // Check if this course belongs to the current teacher
+        if ($this->course->teacher_profile_id != $this->teacherProfile->id) {
+            \Log::warning('Unauthorized course edit attempt', [
+                'course_id' => $id, 
+                'teacher_id' => $this->teacherProfile->id
+            ]);
+            return redirect()->route('teachers.courses')->with('error', 'You are not authorized to edit this course.');
+        }
+
+        \Log::info('Found course for editing', ['course' => $this->course->name]);
 
         // Populate form fields with existing data
-        $this->name = $this->course['name'];
-        $this->slug = $this->course['slug'];
-        $this->description = $this->course['description'];
-        $this->level = $this->course['level'];
-        $this->duration = $this->course['duration'];
-        $this->price = $this->course['price'];
-        $this->subjectId = $this->course['subject_id'];
-        $this->maxStudents = $this->course['max_students'];
-        $this->startDate = $this->course['start_date'];
-        $this->endDate = $this->course['end_date'];
-        $this->status = $this->course['status'];
-        $this->modules = $this->course['curriculum'];
-        $this->outcomes = $this->course['learning_outcomes'];
-        $this->prerequisites = $this->course['prerequisites'];
-        $this->existingCoverImage = $this->course['cover_image'];
+        $this->name = $this->course->name;
+        $this->slug = $this->course->slug;
+        $this->description = $this->course->description;
+        $this->level = $this->course->level;
+        $this->duration = $this->course->duration;
+        $this->price = $this->course->price;
+        $this->subjectId = $this->course->subject_id;
+        $this->maxStudents = $this->course->max_students;
+        $this->startDate = $this->course->start_date ? Carbon::parse($this->course->start_date)->format('Y-m-d') : '';
+        $this->endDate = $this->course->end_date ? Carbon::parse($this->course->end_date)->format('Y-m-d') : '';
+        $this->status = $this->course->status;
+        $this->modules = $this->course->curriculum ?: [['title' => '', 'description' => '']];
+        $this->outcomes = $this->course->learning_outcomes ?: [''];
+        $this->prerequisites = $this->course->prerequisites ?: [''];
+        $this->existingCoverImage = $this->course->cover_image;
 
         // Set active tab from query parameter if available
         if (request()->has('tab')) {
@@ -145,6 +158,7 @@ new class extends Component {
 
     public function loadSubjects()
     {
+        \Log::info('Loading subjects for teacher');
         if ($this->teacherProfile) {
             $this->availableSubjects = $this->teacherProfile->subjects()
                 ->get()
@@ -155,6 +169,7 @@ new class extends Component {
                     ];
                 })
                 ->toArray();
+            \Log::info('Loaded teacher subjects', ['count' => count($this->availableSubjects)]);
         } else {
             // Fallback to all subjects if teacher profile doesn't exist
             $this->availableSubjects = Subject::select('id', 'name')
@@ -166,6 +181,7 @@ new class extends Component {
                     ];
                 })
                 ->toArray();
+            \Log::info('Loaded all subjects as fallback', ['count' => count($this->availableSubjects)]);
         }
     }
 
@@ -173,7 +189,7 @@ new class extends Component {
     public function updatedName()
     {
         // Only update slug if it hasn't been manually edited
-        if ($this->slug === $this->course['slug'] || $this->slug === Str::slug($this->course['name'])) {
+        if ($this->slug === $this->course->slug || $this->slug === Str::slug($this->course->name)) {
             $this->slug = Str::slug($this->name);
         }
     }
@@ -243,6 +259,7 @@ new class extends Component {
     // Validate current step
     protected function validateCurrentStep()
     {
+        \Log::info('Validating step', ['step' => $this->currentStep]);
         $rules = [];
 
         switch ($this->currentStep) {
@@ -286,30 +303,37 @@ new class extends Component {
                 break;
         }
 
-        $this->validate($rules);
+        try {
+            $this->validate($rules);
+            \Log::info('Step validation passed', ['step' => $this->currentStep]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Validation failed for step', [
+                'step' => $this->currentStep,
+                'errors' => $e->errors()
+            ]);
+            throw $e;
+        }
     }
 
     // Submit the form
     public function submit()
     {
+        \Log::info('Starting course update process', ['course_id' => $this->course->id]);
         $this->validateCurrentStep();
 
         // Validate all fields before final submission
         $this->validate();
+        \Log::info('All form validation passed');
 
         // Filter out empty prerequisites
         $filteredPrerequisites = array_filter($this->prerequisites, function($item) {
             return !empty($item);
         });
+        \Log::info('Filtered prerequisites', ['count' => count($filteredPrerequisites)]);
 
         try {
-            // In a real application, this would update the database
-            // For now, we'll just simulate success
-
-            // Update course (commented out actual database operation)
-            /*
-            $course = Course::findOrFail($this->course['id']);
-            $course->update([
+            // Update course from the database
+            $this->course->update([
                 'name' => $this->name,
                 'slug' => $this->slug,
                 'description' => $this->description,
@@ -317,7 +341,6 @@ new class extends Component {
                 'duration' => $this->duration,
                 'price' => $this->price,
                 'subject_id' => $this->subjectId,
-                'teacher_profile_id' => $this->teacherProfile->id,
                 'curriculum' => $this->modules,
                 'prerequisites' => $filteredPrerequisites,
                 'learning_outcomes' => $this->outcomes,
@@ -326,27 +349,32 @@ new class extends Component {
                 'end_date' => $this->endDate,
                 'status' => $this->status
             ]);
+            
+            \Log::info('Course data updated successfully');
 
             // Handle cover image upload or removal
             if ($this->removeCoverImage) {
+                \Log::info('Removing cover image');
                 // Delete existing cover image
-                if ($course->cover_image && Storage::exists($course->cover_image)) {
-                    Storage::delete($course->cover_image);
+                if ($this->course->cover_image && Storage::disk('public')->exists($this->course->cover_image)) {
+                    Storage::disk('public')->delete($this->course->cover_image);
                 }
-                $course->cover_image = null;
-                $course->save();
+                $this->course->cover_image = null;
+                $this->course->save();
+                \Log::info('Cover image removed successfully');
             } elseif ($this->coverImage) {
+                \Log::info('Uploading new cover image');
                 // Delete old cover image if exists
-                if ($course->cover_image && Storage::exists($course->cover_image)) {
-                    Storage::delete($course->cover_image);
+                if ($this->course->cover_image && Storage::disk('public')->exists($this->course->cover_image)) {
+                    Storage::disk('public')->delete($this->course->cover_image);
                 }
 
                 // Save new cover image
                 $imagePath = $this->coverImage->storePublicly('course-covers', 'public');
-                $course->cover_image = $imagePath;
-                $course->save();
+                $this->course->cover_image = $imagePath;
+                $this->course->save();
+                \Log::info('Cover image uploaded successfully', ['path' => $imagePath]);
             }
-            */
 
             // Show success message
             $this->toast(
@@ -358,11 +386,17 @@ new class extends Component {
                 css: 'alert-success',
                 timeout: 3000
             );
-
+            
+            \Log::info('Course update completed, redirecting to course page');
             // Redirect to course page
-            return redirect()->route('teachers.courses.show', $this->course['id']);
+            return redirect()->route('teachers.courses.show', $this->course->id);
 
         } catch (\Exception $e) {
+            \Log::error('Course update failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             // Show error message
             $this->toast(
                 type: 'error',
@@ -386,77 +420,10 @@ new class extends Component {
     public function getCoverImageUrl()
     {
         if ($this->existingCoverImage) {
-            return Storage::url($this->existingCoverImage);
+            return Storage::disk('public')->url($this->existingCoverImage);
         }
 
         return null;
-    }
-
-    // Mock course data (would be fetched from database in a real app)
-    private function getMockCourse($id)
-    {
-        return [
-            'id' => $id,
-            'name' => 'Advanced Laravel Development',
-            'slug' => 'advanced-laravel-development',
-            'description' => 'Master advanced Laravel concepts including Middleware, Service Containers, and more. This comprehensive course dives deep into Laravel\'s architecture and advanced features to help you build robust, scalable applications.',
-            'level' => 'advanced',
-            'subject_id' => 1,
-            'subject_name' => 'Laravel Development',
-            'teacher_profile_id' => $this->teacherProfile->id ?? 1,
-            'price' => 299.99,
-            'status' => 'active',
-            'students_count' => 12,
-            'max_students' => 20,
-            'duration' => 8,
-            'start_date' => Carbon::now()->subWeeks(2)->format('Y-m-d'),
-            'end_date' => Carbon::now()->addWeeks(6)->format('Y-m-d'),
-            'created_at' => Carbon::now()->subDays(30)->format('Y-m-d H:i:s'),
-            'updated_at' => Carbon::now()->subDays(5)->format('Y-m-d H:i:s'),
-            'cover_image' => null,
-            'completed_percentage' => 25,
-            'curriculum' => [
-                [
-                    'title' => 'Module 1: Advanced Routing',
-                    'description' => 'Learn advanced routing techniques including route model binding, route caching, and route groups.',
-                    'completed' => true
-                ],
-                [
-                    'title' => 'Module 2: Service Containers and IoC',
-                    'description' => 'Deep dive into dependency injection, service providers, and the inversion of control pattern.',
-                    'completed' => true
-                ],
-                [
-                    'title' => 'Module 3: Custom Middleware',
-                    'description' => 'Create and implement custom middleware for request filtering, authentication, and more.',
-                    'completed' => false
-                ],
-                [
-                    'title' => 'Module 4: Advanced Eloquent',
-                    'description' => 'Master advanced Eloquent features like polymorphic relationships, query scopes, and custom casts.',
-                    'completed' => false
-                ],
-                [
-                    'title' => 'Module 5: Final Project',
-                    'description' => 'Apply all learned concepts to build a complete application with advanced Laravel features.',
-                    'completed' => false
-                ]
-            ],
-            'learning_outcomes' => [
-                'Build complex Laravel applications',
-                'Implement custom service providers',
-                'Optimize database queries',
-                'Create reusable packages',
-                'Deploy Laravel applications to production environments',
-                'Implement advanced authentication systems'
-            ],
-            'prerequisites' => [
-                'Basic Laravel knowledge',
-                'PHP proficiency',
-                'Understanding of MVC architecture',
-                'Familiarity with Composer and package management'
-            ],
-        ];
     }
 
     // Toast notification helper function
@@ -484,7 +451,6 @@ new class extends Component {
         ");
     }
 }; ?>
-
 <div class="p-6">
     <div class="max-w-4xl mx-auto">
         <!-- Header Section -->
@@ -494,7 +460,7 @@ new class extends Component {
                 <p class="mt-1 text-base-content/70">Update your course information and settings</p>
             </div>
             <div>
-                <a href="{{ route('teachers.courses.show', $course['id']) }}" class="btn btn-outline">
+                <a href="{{ route('teachers.courses.show', $course->id) }}" class="btn btn-outline">
                     <x-icon name="o-arrow-left" class="w-4 h-4 mr-2" />
                     Back to Course
                 </a>
@@ -794,7 +760,8 @@ new class extends Component {
                                     </div>
                                     @if(count($outcomes) > 1)
                                         <button
-                                            wire:click="removeOutcome({{ $index }})"type="button"
+                                            wire:click="removeOutcome({{ $index }})"
+                                            type="button"
                                             class="btn btn-sm btn-ghost btn-circle"
                                         >
                                             <x-icon name="o-x-mark" class="w-5 h-5" />

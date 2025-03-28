@@ -17,17 +17,18 @@ return new class extends Migration
             $table->string('slug')->unique();
             $table->text('description');
             $table->string('level');
-            $table->string('duration');
+            $table->integer('duration')->unsigned(); // Changed to integer to match component
             $table->decimal('price', 10, 2);
             $table->enum('status', ['active', 'inactive', 'draft'])->default('draft');
             $table->foreignId('teacher_profile_id')->constrained('teacher_profiles')->onDelete('cascade');
             $table->foreignId('subject_id')->constrained()->onDelete('cascade');
             $table->json('curriculum');
-            $table->json('prerequisites');
+            $table->json('prerequisites')->nullable(); // Made nullable since it's optional
             $table->json('learning_outcomes');
             $table->integer('max_students')->unsigned();
-            $table->timestamp('start_date')->nullable();
-            $table->timestamp('end_date')->nullable();
+            $table->date('start_date'); // Changed to date to match component
+            $table->date('end_date'); // Changed to date to match component
+            $table->string('cover_image')->nullable(); // Added cover_image field
             $table->timestamps();
         });
     }

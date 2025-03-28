@@ -52,7 +52,7 @@ class Children extends Model {
 
     public function assessments(): BelongsToMany
 {
-    return $this->belongsToMany(Assessment::class, 'assessment_children')
+    return $this->belongsToMany(Assessment::class, 'assessment_childrens')
         ->withPivot(['status', 'start_time', 'end_time', 'score'])
         ->withTimestamps();
 }
@@ -64,4 +64,12 @@ public function assessmentSubmissions(): HasMany
 {
     return $this->hasMany(AssessmentSubmission::class, 'children_id');
 }
+/**
+ * Get the enrollments for the student.
+ */
+public function enrollments(): HasMany
+{
+    return $this->hasMany(Enrollment::class, 'student_id', 'id');
+}
+
 }

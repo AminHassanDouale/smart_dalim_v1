@@ -5,6 +5,7 @@ use Livewire\WithPagination;
 use App\Models\ParentProfile;
 use App\Models\Children;
 use App\Models\LearningSession;
+use App\Models\Enrollment;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 
@@ -15,6 +16,7 @@ new class extends Component {
     public $parentProfile;
     public $children = [];
     public $upcomingSessions = [];
+    public $enrollments = [];
 
     // Dashboard statistics
     public $stats = [
@@ -38,162 +40,303 @@ new class extends Component {
     public function mount()
     {
         $this->user = Auth::user();
-        $this->parentProfile = $this->user->parentProfile;
+        $this->loadParentData();
+        $this->loadStatsFromDatabase();
+        $this->loadUpcomingSessionsFromDatabase();
+        $this->loadEnrollments();
+        $this->prepareChartData();
+    }
+
+    public function loadParentData()
+    {
+        $this->parentProfile = $this->user->parentProfile()->with(['children' => function($query) {
+            $query->with(['teacher', 'subjects', 'learningSessions']);
+        }])->first();
 
         // Fetch children if parent profile exists
         if ($this->parentProfile) {
             $this->children = $this->parentProfile->children;
-            $this->loadStats();
-            $this->loadUpcomingSessions();
-            $this->prepareChartData();
         }
     }
 
-    public function loadStats()
+    public function loadStatsFromDatabase()
     {
-        // In a real app, you would calculate these from database queries
+        if (!$this->parentProfile) {
+            return;
+        }
+
+        $childrenIds = $this->children->pluck('id')->toArray();
+        
+        // Get actual statistics from database
+        $totalSessions = LearningSession::whereIn('children_id', $childrenIds)->count();
+        $upcomingSessions = LearningSession::whereIn('children_id', $childrenIds)
+            ->where('start_time', '>', now())
+            ->where('status', LearningSession::STATUS_SCHEDULED)
+            ->count();
+            
+        $completedSessions = LearningSession::whereIn('children_id', $childrenIds)
+            ->where('status', LearningSession::STATUS_COMPLETED)
+            ->count();
+        
+        // Get pending homework count (simulated)
+        $pendingHomework = rand(0, 5); // Replace with actual homework count when model exists
+        
+        // Calculate average progress
+        $avgProgress = $totalSessions > 0 
+            ? round(($completedSessions / $totalSessions) * 100) 
+            : 0;
+        
+        // Update the stats array
         $this->stats = [
             'total_children' => $this->children->count(),
-            'total_sessions' => rand(10, 50),
-            'upcoming_sessions' => rand(2, 8),
-            'completed_sessions' => rand(8, 40),
-            'pending_homework' => rand(0, 5),
-            'average_progress' => rand(65, 95)
+            'total_sessions' => $totalSessions,
+            'upcoming_sessions' => $upcomingSessions,
+            'completed_sessions' => $completedSessions,
+            'pending_homework' => $pendingHomework,
+            'average_progress' => $avgProgress
         ];
     }
-
-    public function loadUpcomingSessions()
+    
+    public function loadUpcomingSessionsFromDatabase()
     {
-        // In a real app, you would fetch this from the database
-        // For now, we'll generate mock data
-        $this->upcomingSessions = $this->getMockSessions();
-    }
-
-    private function getMockSessions()
-    {
-        $sessions = [];
-        $subjects = ['Mathematics', 'Science', 'English Literature', 'History', 'Programming'];
-        $statuses = ['scheduled', 'in_progress', 'completed', 'cancelled'];
-
-        foreach ($this->children as $index => $child) {
-            // Generate 2-3 sessions per child
-            $count = rand(2, 3);
-
-            for ($i = 0; $i < $count; $i++) {
-                $startDate = Carbon::now()->addDays(rand(1, 14))->setHour(rand(9, 17))->setMinute(0)->setSecond(0);
-                $endDate = (clone $startDate)->addHours(rand(1, 2));
-
-                $sessions[] = [
-                    'id' => count($sessions) + 1,
-                    'child_id' => $child->id,
-                    'child_name' => $child->name,
-                    'subject' => $subjects[array_rand($subjects)],
-                    'teacher' => $this->getRandomTeacherName(),
-                    'start_time' => $startDate,
-                    'end_time' => $endDate,
-                    'status' => $statuses[array_rand($statuses)],
-                    'location' => 'Online',
-                    'notes' => rand(0, 1) ? 'Preparation required' : ''
-                ];
-            }
+        if (!$this->parentProfile) {
+            return;
         }
 
-        // Sort by start date
-        usort($sessions, function ($a, $b) {
-            return $a['start_time']->timestamp - $b['start_time']->timestamp;
-        });
-
-        return $sessions;
+        $childrenIds = $this->children->pluck('id')->toArray();
+        
+        // Apply filters
+        $query = LearningSession::whereIn('children_id', $childrenIds)
+            ->with(['children', 'teacher', 'subject']);
+            
+        // Apply child filter if selected
+        if (!empty($this->childFilter)) {
+            $query->where('children_id', $this->childFilter);
+        }
+        
+        // Apply date range filter
+        switch ($this->dateRangeFilter) {
+            case 'today':
+                $query->whereDate('start_time', Carbon::today());
+                break;
+            case 'this_week':
+                $query->whereBetween('start_time', [
+                    Carbon::now()->startOfWeek(),
+                    Carbon::now()->endOfWeek()
+                ]);
+                break;
+            case 'next_week':
+                $query->whereBetween('start_time', [
+                    Carbon::now()->addWeek()->startOfWeek(),
+                    Carbon::now()->addWeek()->endOfWeek()
+                ]);
+                break;
+            case 'upcoming':
+            default:
+                $query->where('start_time', '>', now());
+                break;
+        }
+        
+        // Apply status filter if selected
+        if (!empty($this->statusFilter)) {
+            $query->where('status', $this->statusFilter);
+        } else {
+            // Default to scheduled if no status selected
+            $query->where('status', LearningSession::STATUS_SCHEDULED);
+        }
+        
+        // Get the sessions
+        $sessions = $query->orderBy('start_time')->limit(10)->get();
+        
+        // Format sessions for display
+        $this->upcomingSessions = $sessions->map(function($session) {
+            return [
+                'id' => $session->id,
+                'child_id' => $session->children_id,
+                'child_name' => $session->children ? $session->children->name : 'Unknown',
+                'subject' => $session->subject ? $session->subject->name : 'General',
+                'teacher' => $session->teacher ? $session->teacher->name : 'Unassigned',
+                'start_time' => $session->start_time,
+                'end_time' => $session->end_time,
+                'status' => $session->status,
+                'location' => $session->location ?? 'Online',
+                'notes' => $session->notes
+            ];
+        })->toArray();
     }
-
-    private function getRandomTeacherName()
+    
+    public function loadEnrollments()
     {
-        $teachers = [
-            'Sarah Johnson',
-            'Michael Chen',
-            'Emily Rodriguez',
-            'David Wilson',
-            'Alex Johnson',
-            'Lisa Chen'
-        ];
+        if (!$this->parentProfile) {
+            return;
+        }
 
-        return $teachers[array_rand($teachers)];
+        $childrenIds = $this->children->pluck('id')->toArray();
+        
+        // Get active enrollments for all children
+        $this->enrollments = Enrollment::whereIn('student_id', $childrenIds)
+            ->where('status', 'active')
+            ->with(['course.subject', 'course.teacher'])
+            ->get();
     }
 
     public function prepareChartData()
     {
-        // Sessions chart data - sessions per week
-        $weeksData = [];
-
-        for ($i = 0; $i < 4; $i++) {
-            $weekLabel = Carbon::now()->subWeeks(3 - $i)->startOfWeek()->format('M d');
-            $weeksData[] = [
-                'name' => $weekLabel,
-                'sessions' => rand(2, 8)
-            ];
+        if (!$this->parentProfile) {
+            return;
         }
 
+        $childrenIds = $this->children->pluck('id')->toArray();
+        
+        // Sessions chart data - sessions per week (from actual data)
+        $weeksData = [];
+        
+        for ($i = 0; $i < 4; $i++) {
+            $startDate = Carbon::now()->subWeeks(3 - $i)->startOfWeek();
+            $endDate = Carbon::now()->subWeeks(3 - $i)->endOfWeek();
+            $weekLabel = $startDate->format('M d');
+            
+            $sessionsCount = LearningSession::whereIn('children_id', $childrenIds)
+                ->whereBetween('start_time', [$startDate, $endDate])
+                ->count();
+                
+            $weeksData[] = [
+                'name' => $weekLabel,
+                'sessions' => $sessionsCount
+            ];
+        }
+        
         $this->sessionsChartData = $weeksData;
 
         // Progress chart data - progress by subject
-        $subjects = ['Mathematics', 'Science', 'English', 'History', 'Art'];
+        // For now using child subjects, but ideally would calculate progress for each
+        $subjects = [];
+        foreach ($this->children as $child) {
+            foreach ($child->subjects as $subject) {
+                $subjects[$subject->id] = $subject->name;
+            }
+        }
+        
         $progressData = [];
-
-        foreach ($subjects as $subject) {
+        foreach ($subjects as $id => $name) {
+            // Ideally calculate real progress based on completed sessions or assessments
+            // For now using random values as placeholders
             $progressData[] = [
-                'subject' => $subject,
+                'subject' => $name,
                 'progress' => rand(30, 95)
             ];
         }
-
+        
+        // If no subjects found, use default placeholders
+        if (empty($progressData)) {
+            $defaultSubjects = ['Mathematics', 'Science', 'English', 'History', 'Art'];
+            foreach ($defaultSubjects as $subject) {
+                $progressData[] = [
+                    'subject' => $subject,
+                    'progress' => rand(30, 95)
+                ];
+            }
+        }
+        
         $this->progressChartData = $progressData;
+    }
+
+    // Update filters and refresh data
+    public function updatedChildFilter()
+    {
+        $this->loadUpcomingSessionsFromDatabase();
+    }
+    
+    public function updatedDateRangeFilter()
+    {
+        $this->loadUpcomingSessionsFromDatabase();
+    }
+    
+    public function updatedStatusFilter()
+    {
+        $this->loadUpcomingSessionsFromDatabase();
     }
 
     public function getRecentActivitiesProperty()
     {
-        // Mock recent activities
-        return [
-            [
-                'id' => 1,
-                'type' => 'session_completed',
-                'title' => 'Session Completed',
-                'description' => 'Mathematics lesson with Sarah Johnson',
-                'child' => $this->children->first()->name ?? 'Child',
-                'time' => Carbon::now()->subDays(1)->format('M d, Y'),
-                'icon' => 'o-check-circle',
-                'color' => 'bg-green-100 text-green-600'
-            ],
-            [
-                'id' => 2,
-                'type' => 'homework_assigned',
-                'title' => 'Homework Assigned',
-                'description' => 'Science project due next week',
-                'child' => $this->children->first()->name ?? 'Child',
-                'time' => Carbon::now()->subDays(2)->format('M d, Y'),
-                'icon' => 'o-document-text',
-                'color' => 'bg-blue-100 text-blue-600'
-            ],
-            [
-                'id' => 3,
-                'type' => 'session_scheduled',
-                'title' => 'Session Scheduled',
-                'description' => 'English Literature with Michael Chen',
-                'child' => $this->children->first()->name ?? 'Child',
-                'time' => Carbon::now()->subDays(3)->format('M d, Y'),
-                'icon' => 'o-calendar',
-                'color' => 'bg-purple-100 text-purple-600'
-            ],
-            [
-                'id' => 4,
-                'type' => 'assessment_result',
-                'title' => 'Assessment Result',
-                'description' => 'Mathematics quiz: 92%',
-                'child' => $this->children->first()->name ?? 'Child',
-                'time' => Carbon::now()->subDays(5)->format('M d, Y'),
-                'icon' => 'o-academic-cap',
-                'color' => 'bg-yellow-100 text-yellow-600'
-            ]
-        ];
+        if (!$this->parentProfile) {
+            return [];
+        }
+        
+        $childrenIds = $this->children->pluck('id')->toArray();
+        $activities = [];
+
+        // Get recent sessions
+        $recentSessions = LearningSession::whereIn('children_id', $childrenIds)
+            ->with(['children', 'subject', 'teacher'])
+            ->latest('updated_at')
+            ->limit(4)
+            ->get();
+            
+        foreach ($recentSessions as $session) {
+            $childName = $session->children ? $session->children->name : 'Unknown';
+            $teacherName = $session->teacher ? $session->teacher->name : 'Unknown';
+            $subjectName = $session->subject ? $session->subject->name : 'General';
+            
+            if ($session->status === LearningSession::STATUS_COMPLETED) {
+                $activities[] = [
+                    'id' => $session->id,
+                    'type' => 'session_completed',
+                    'title' => 'Session Completed',
+                    'description' => $subjectName . ' lesson with ' . $teacherName,
+                    'child' => $childName,
+                    'time' => Carbon::parse($session->updated_at)->format('M d, Y'),
+                    'icon' => 'o-check-circle',
+                    'color' => 'bg-green-100 text-green-600'
+                ];
+            } elseif ($session->status === LearningSession::STATUS_SCHEDULED) {
+                $activities[] = [
+                    'id' => $session->id,
+                    'type' => 'session_scheduled',
+                    'title' => 'Session Scheduled',
+                    'description' => $subjectName . ' with ' . $teacherName,
+                    'child' => $childName,
+                    'time' => Carbon::parse($session->updated_at)->format('M d, Y'),
+                    'icon' => 'o-calendar',
+                    'color' => 'bg-purple-100 text-purple-600'
+                ];
+            }
+        }
+        
+        // If we don't have enough real activities, add some placeholders
+        if (count($activities) < 4) {
+            $sampleActivities = [
+                [
+                    'id' => 'placeholder-1',
+                    'type' => 'homework_assigned',
+                    'title' => 'Homework Assigned',
+                    'description' => 'Science project due next week',
+                    'child' => $this->children->first()->name ?? 'Child',
+                    'time' => Carbon::now()->subDays(2)->format('M d, Y'),
+                    'icon' => 'o-document-text',
+                    'color' => 'bg-blue-100 text-blue-600'
+                ],
+                [
+                    'id' => 'placeholder-2',
+                    'type' => 'assessment_result',
+                    'title' => 'Assessment Result',
+                    'description' => 'Mathematics quiz: 92%',
+                    'child' => $this->children->first()->name ?? 'Child',
+                    'time' => Carbon::now()->subDays(5)->format('M d, Y'),
+                    'icon' => 'o-academic-cap',
+                    'color' => 'bg-yellow-100 text-yellow-600'
+                ]
+            ];
+            
+            $activities = array_merge($activities, array_slice($sampleActivities, 0, 4 - count($activities)));
+        }
+        
+        // Sort by time
+        usort($activities, function($a, $b) {
+            return strtotime($b['time']) - strtotime($a['time']);
+        });
+        
+        return array_slice($activities, 0, 4);
     }
 
     public function formatDate($date)
@@ -220,14 +363,59 @@ new class extends Component {
 
 <div class="min-h-screen p-6 bg-base-200">
     <div class="mx-auto max-w-7xl">
-        <!-- Welcome Banner -->
+        <!-- Welcome Banner with Auth Data -->
         <div class="mb-8 overflow-hidden text-white shadow-lg rounded-xl bg-gradient-to-r from-primary to-primary-focus">
             <div class="flex flex-col items-center md:flex-row">
                 <div class="flex-1 p-6 md:p-8">
                     <h1 class="mb-2 text-3xl font-bold">Welcome back, {{ $user->name }}!</h1>
-                    <p class="mb-4 text-white/80">
+                    <p class="mb-1 text-white/90">
                         {{ Carbon::now()->format('l, F d, Y') }}
                     </p>
+                    
+                    <!-- Auth Data Section -->
+                    <div class="p-3 mt-3 text-white rounded-lg bg-white/10">
+                        <h3 class="mb-2 font-semibold">Your Account Details</h3>
+                        <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                            <div>
+                                <p class="flex items-center">
+                                    <x-icon name="o-user" class="w-4 h-4 mr-2" />
+                                    <span class="text-white/80">Email:</span>
+                                    <span class="ml-2">{{ $user->email }}</span>
+                                </p>
+                                <p class="flex items-center">
+                                    <x-icon name="o-identification" class="w-4 h-4 mr-2" />
+                                    <span class="text-white/80">Role:</span>
+                                    <span class="ml-2 capitalize">{{ $user->role }}</span>
+                                </p>
+                                <p class="flex items-center">
+                                    <x-icon name="o-check-badge" class="w-4 h-4 mr-2" />
+                                    <span class="text-white/80">Status:</span>
+                                    <span class="ml-2">{{ $user->hasCompletedProfile() ? 'Profile Complete' : 'Profile Incomplete' }}</span>
+                                </p>
+                            </div>
+                            <div>
+                                @if($parentProfile)
+                                    <p class="flex items-center">
+                                        <x-icon name="o-phone" class="w-4 h-4 mr-2" />
+                                        <span class="text-white/80">Phone:</span>
+                                        <span class="ml-2">{{ $parentProfile->phone_number ?? 'Not set' }}</span>
+                                    </p>
+                                    <p class="flex items-center">
+                                        <x-icon name="o-map-pin" class="w-4 h-4 mr-2" />
+                                        <span class="text-white/80">Address:</span>
+                                        <span class="ml-2">{{ $parentProfile->address ?? 'Not set' }}</span>
+                                    </p>
+                                    <p class="flex items-center">
+                                        <x-icon name="o-user-group" class="w-4 h-4 mr-2" />
+                                        <span class="text-white/80">Children:</span>
+                                        <span class="ml-2">{{ $stats['total_children'] }}</span>
+                                    </p>
+                                @else
+                                    <p class="text-white/80">Parent profile not created yet.</p>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="flex flex-wrap gap-2 mt-4">
                         <a href="{{ route('parents.profile') }}" class="text-white border-none btn btn-sm bg-white/20 hover:bg-white/30">
@@ -273,11 +461,11 @@ new class extends Component {
             <div class="shadow stats bg-base-100">
                 <div class="stat">
                     <div class="stat-figure text-accent">
-                        <x-icon name="o-document-text" class="w-8 h-8" />
+                        <x-icon name="o-academic-cap" class="w-8 h-8" />
                     </div>
-                    <div class="stat-title">Pending Homework</div>
-                    <div class="stat-value text-accent">{{ $stats['pending_homework'] }}</div>
-                    <div class="stat-desc">Assignments to complete</div>
+                    <div class="stat-title">Sessions Completed</div>
+                    <div class="stat-value text-accent">{{ $stats['completed_sessions'] }}</div>
+                    <div class="stat-desc">Learning progress</div>
                 </div>
             </div>
         </div>
@@ -388,7 +576,7 @@ new class extends Component {
 
                         @if(count($children) > 0)
                         <div class="grid grid-cols-1 gap-4">
-                            @foreach($children as $index => $child)
+                            @foreach($children as $child)
                             <div class="shadow-sm card bg-base-200">
                                 <div class="p-4 card-body">
                                     <div class="flex items-center gap-4">
@@ -399,9 +587,35 @@ new class extends Component {
                                         </div>
                                         <div class="flex-1">
                                             <h3 class="font-bold">{{ $child->name }}</h3>
-                                            <p class="text-sm opacity-70">{{ $child->school_name }} - Grade {{ $child->grade }}</p>
+                                            <p class="text-sm opacity-70">{{ $child->school_name ?? 'School not set' }} - Grade {{ $child->grade ?? 'N/A' }}</p>
                                         </div>
                                         <a href="{{ route('parents.progress.child', $child->id) }}" class="btn btn-sm">View Progress</a>
+                                    </div>
+
+                                    <!-- Child's information -->
+                                    <div class="mt-3 p-2 rounded-lg bg-base-300/50">
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <p class="text-sm flex">
+                                                    <span class="opacity-70">Age:</span>
+                                                    <span class="ml-2 font-medium">{{ $child->age ?? 'Not set' }}</span>
+                                                </p>
+                                                <p class="text-sm flex">
+                                                    <span class="opacity-70">Gender:</span>
+                                                    <span class="ml-2 font-medium">{{ $child->gender ?? 'Not set' }}</span>
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p class="text-sm flex">
+                                                    <span class="opacity-70">Teacher:</span>
+                                                    <span class="ml-2 font-medium">{{ $child->teacher ? $child->teacher->name : 'Not assigned' }}</span>
+                                                </p>
+                                                <p class="text-sm flex">
+                                                    <span class="opacity-70">Subjects:</span>
+                                                    <span class="ml-2 font-medium">{{ $child->subjects->count() }}</span>
+                                                </p>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <!-- Subject Progress Bars -->
@@ -422,19 +636,19 @@ new class extends Component {
                                         @endforeach
                                     </div>
 
-                                    <!-- Recent achievements or notifications -->
+                                    <!-- Child's sessions -->
                                     <div class="flex items-center justify-between mt-3">
                                         <div class="badge badge-outline">
                                             <x-icon name="o-calendar" class="w-3 h-3 mr-1" />
-                                            {{ rand(1, 5) }} upcoming sessions
+                                            {{ $child->learningSessions()->where('status', 'scheduled')->count() }} upcoming
                                         </div>
                                         <div class="badge badge-outline">
-                                            <x-icon name="o-document-text" class="w-3 h-3 mr-1" />
-                                            {{ rand(0, 3) }} pending homework
+                                            <x-icon name="o-check-circle" class="w-3 h-3 mr-1" />
+                                            {{ $child->learningSessions()->where('status', 'completed')->count() }} completed
                                         </div>
                                         <div class="badge badge-outline">
                                             <x-icon name="o-academic-cap" class="w-3 h-3 mr-1" />
-                                            {{ rand(85, 98) }}% attendance
+                                            {{ $child->assessments()->count() }} assessments
                                         </div>
                                     </div>
                                 </div>
@@ -455,13 +669,51 @@ new class extends Component {
 
             <!-- Right Column (Sidebar) -->
             <div class="space-y-6">
+                <!-- Account Summary -->
+                <div class="shadow-xl card bg-base-100">
+                    <div class="card-body">
+                        <h2 class="mb-4 card-title">Account Summary</h2>
+                        <div class="space-y-4">
+                            <div class="flex justify-between">
+                                <span class="text-base-content/70">Account Created:</span>
+                                <span class="font-medium">{{ Carbon::parse($user->created_at)->format('M d, Y') }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-base-content/70">Last Login:</span>
+                                <span class="font-medium">{{ Carbon::now()->format('M d, Y H:i') }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-base-content/70">Profile Status:</span>
+                                <span class="font-medium">
+                                    @if($user->hasCompletedProfile())
+                                        <span class="text-success">Complete</span>
+                                    @else
+                                        <span class="text-warning">Incomplete</span>
+                                    @endif
+                                </span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-base-content/70">Active Enrollments:</span>
+                                <span class="font-medium">{{ $enrollments->count() }}</span>
+                            </div>
+                        </div>
+                        <div class="divider"></div>
+                        <div class="card-actions">
+                            <a href="{{ route('parents.profile.edit', $user) }}" class="btn btn-outline btn-block btn-sm">
+                                <x-icon name="o-pencil-square" class="w-4 h-4 mr-2" />
+                                Edit Profile
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Quick Actions -->
                 <div class="shadow-xl card bg-base-100">
                     <div class="card-body">
                         <h2 class="mb-4 card-title">Quick Actions</h2>
                         <div class="grid grid-cols-2 gap-3">
                             <a href="{{ route('parents.sessions.requests') }}" class="btn btn-outline">
-                                <x-icon name="o-calendar-plus" class="w-4 h-4 mr-2" />
+                                <x-icon name="o-eye" class="w-4 h-4 mr-2" />
                                 New Session
                             </a>
                             <a href="{{ route('parents.children.create') }}" class="btn btn-outline">
@@ -516,50 +768,6 @@ new class extends Component {
                         </div>
                         <div class="justify-center mt-4 card-actions">
                             <a href="#" class="btn btn-ghost btn-sm">View All Activity</a>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Upcoming Payments -->
-                <div class="shadow-xl card bg-base-100">
-                    <div class="card-body">
-                        <h2 class="mb-2 card-title">Upcoming Payments</h2>
-                        @if(true)
-                        <div class="mt-4 space-y-4">
-                            <div class="p-3 rounded-lg bg-base-200">
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <div class="font-medium">Monthly Tuition</div>
-                                        <div class="text-sm opacity-70">Due in 5 days</div>
-                                    </div>
-                                    <div class="text-lg font-bold">$250.00</div>
-                                </div>
-                                <div class="flex justify-end mt-2">
-                                    <a href="{{ route('parents.billing.index') }}" class="btn btn-sm btn-primary">Pay Now</a>
-                                </div>
-                            </div>
-
-                            <div class="p-3 rounded-lg bg-base-200">
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <div class="font-medium">Materials Fee</div>
-                                        <div class="text-sm opacity-70">Due in 12 days</div>
-                                    </div>
-                                    <div class="text-lg font-bold">$45.00</div>
-                                </div>
-                                <div class="flex justify-end mt-2">
-                                    <a href="{{ route('parents.billing.index') }}" class="btn btn-sm btn-primary">Pay Now</a>
-                                </div>
-                            </div>
-                        </div>
-                        @else
-                        <div class="py-4 text-center">
-                            <x-icon name="o-credit-card" class="w-10 h-10 mx-auto mb-2 text-base-content/30" />
-                            <p class="text-base-content/70">No upcoming payments</p>
-                        </div>
-                        @endif
-                        <div class="justify-end mt-2 card-actions">
-                            <a href="{{ route('parents.payments.index') }}" class="btn btn-sm btn-ghost">Payment History</a>
                         </div>
                     </div>
                 </div>

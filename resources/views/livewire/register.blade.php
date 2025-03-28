@@ -9,6 +9,8 @@ use Illuminate\Validation\Rules;
 use Livewire\Volt\Component;
 use Illuminate\Support\Facades\DB;
 use App\Models\TeacherProfile;
+use App\Models\ParentProfile;
+use App\Models\ClientProfile;
 
 new class extends Component {
     public string $name = '';
@@ -20,11 +22,19 @@ new class extends Component {
     public array $selectedSubjects = [];
     public int $currentStep = 1;
 
+    // Added fields for client profile
+    public string $company_name = '';
+    public string $position = '';
+
+    // Debug
+    public string $debug_message = '';
+
     public function roles(): array
     {
         return [
             ['id' => 'parent', 'name' => 'Parent'],
             ['id' => 'teacher', 'name' => 'Teacher'],
+            ['id' => 'client', 'name' => 'Client'], // Added client role
         ];
     }
 
@@ -46,14 +56,21 @@ new class extends Component {
         if ($this->currentStep === 2) {
             $this->validate([
                 'password' => ['required', 'confirmed', Rules\Password::defaults()],
-                'role' => ['required', 'in:parent,teacher'],
+                'role' => ['required', 'in:parent,teacher,client'],
             ]);
+        }
 
-          //  if ($this->role === 'teacher') {
-          //      $this->validate([
-          //          'selectedSubjects' => ['required', 'array', 'min:1'],
-          //      ]);
-          //  }
+        if ($this->currentStep === 3 && $this->role === 'teacher') {
+            $this->validate([
+                'selectedSubjects' => ['required', 'array', 'min:1'],
+            ]);
+        }
+
+        if ($this->currentStep === 3 && $this->role === 'client') {
+            $this->validate([
+                'company_name' => ['required', 'string', 'max:255'],
+                'position' => ['required', 'string', 'max:100'],
+            ]);
         }
 
         $this->currentStep++;
@@ -66,19 +83,28 @@ new class extends Component {
 
     public function register()
     {
-        $validationRules = [
-            'name' => ['required', 'string', 'max:255'],
-            'username' => ['required', 'string', 'max:255', 'unique:users'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:'.User::class],
-            'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'role' => ['required', 'in:parent,teacher'],
-        ];
-
-        $validated = $this->validate($validationRules);
-
         try {
-            DB::beginTransaction();
+            $validationRules = [
+                'name' => ['required', 'string', 'max:255'],
+                'username' => ['required', 'string', 'max:255', 'unique:users'],
+                'email' => ['required', 'string', 'email', 'max:255', 'unique:'.User::class],
+                'password' => ['required', 'confirmed', Rules\Password::defaults()],
+                'role' => ['required', 'in:parent,teacher,client'],
+            ];
 
+            // Add role-specific validation
+            if ($this->role === 'teacher') {
+                $validationRules['selectedSubjects'] = ['required', 'array', 'min:1'];
+            }
+
+            if ($this->role === 'client') {
+                $validationRules['company_name'] = ['required', 'string', 'max:255'];
+                $validationRules['position'] = ['required', 'string', 'max:100'];
+            }
+
+            $validated = $this->validate($validationRules);
+
+            // Start with a simpler approach - don't use DB transaction initially
             $user = User::create([
                 'name' => $this->name,
                 'username' => $this->username,
@@ -87,24 +113,56 @@ new class extends Component {
                 'role' => $this->role,
             ]);
 
+            $this->debug_message = "User created with ID: {$user->id}";
+
+            // Create role-specific profiles
             if ($this->role === 'teacher') {
-                $user->teacherProfile()->create([
+                $teacherProfile = new TeacherProfile([
+                    'user_id' => $user->id,
                     'has_completed_profile' => false,
                     'status' => TeacherProfile::STATUS_SUBMITTED
                 ]);
-            }
+                $user->teacherProfile()->save($teacherProfile);
 
-            DB::commit();
+                // Attach subjects if selected
+                if (!empty($this->selectedSubjects)) {
+                    $user->subjects()->attach($this->selectedSubjects);
+                }
+
+                $this->debug_message .= " | Teacher profile created";
+            }
+            elseif ($this->role === 'parent') {
+                $parentProfile = new ParentProfile([
+                    'user_id' => $user->id,
+                    'has_completed_profile' => false,
+                ]);
+                $user->parentProfile()->save($parentProfile);
+
+                $this->debug_message .= " | Parent profile created";
+            }
+            elseif ($this->role === 'client') {
+                $clientProfile = new ClientProfile([
+                    'user_id' => $user->id,
+                    'has_completed_profile' => false,
+                    'status' => ClientProfile::STATUS_PENDING,
+                    'company_name' => $this->company_name,
+                    'position' => $this->position,
+                ]);
+                $user->clientProfile()->save($clientProfile);
+
+                $this->debug_message .= " | Client profile created";
+            }
 
             event(new Registered($user));
 
-            // Remove the Auth::login($user) since we want them to log in manually
-            // Auth::login($user);
+            // Login the user automatically
+            Auth::login($user);
 
-            // Show success message
+            $this->debug_message .= " | User logged in";
+
             $this->js("
                 Toaster.success('Registration Successful!', {
-                    description: 'Please log in to continue',
+                    description: 'Redirecting to profile setup...',
                     position: 'toast-bottom toast-end',
                     icon: 'o-check-circle',
                     css: 'alert-success',
@@ -112,28 +170,51 @@ new class extends Component {
                 });
             ");
 
-            // Redirect to login page for both roles
-            return redirect()->route('login');
+            // Use route helper to get full URL instead of just name
+            $redirectRoute = '';
+
+            if ($this->role === 'parent') {
+                $redirectRoute = route('profile-setup');
+                $this->debug_message .= " | Should redirect to parent profile setup";
+            }
+            elseif ($this->role === 'teacher') {
+                $redirectRoute = route('teachers.profile-setup');
+                $this->debug_message .= " | Should redirect to teacher profile setup";
+            }
+            elseif ($this->role === 'client') {
+                $redirectRoute = route('clients.profile-setup');
+                $this->debug_message .= " | Should redirect to client profile setup";
+            }
+
+            // Use JavaScript redirect as fallback
+            $this->js("
+                setTimeout(function() {
+                    window.location.href = '{$redirectRoute}';
+                }, 2000);
+            ");
+
+            // Return PHP redirect as primary method
+            if (!empty($redirectRoute)) {
+                return redirect($redirectRoute);
+            }
 
         } catch (\Exception $e) {
-            DB::rollBack();
+            $this->debug_message = "Error: " . $e->getMessage();
 
             $this->js("
-                Toaster.error('Registration failed!', {
-                    description: 'Something went wrong during registration. Please try again.',
+                Toaster.error('Registration failed: {$e->getMessage()}', {
                     position: 'toast-bottom toast-end',
                     icon: 'o-x-circle',
                     css: 'alert-error',
                     timeout: 3000
                 });
             ");
-
-            return;
         }
     }
+
     public function updatedRole($value)
     {
-        if ($value === 'parent') {
+        if ($value === 'parent' || $value === 'client') {
             $this->selectedSubjects = [];
         }
     }
@@ -261,13 +342,47 @@ new class extends Component {
             </div>
             @else
             <div>
-                <!-- Step 3: Additional Information -->
+                <!-- Step 3: Role-specific Information -->
+                @if($role === 'teacher')
+                    <div class="mb-4">
+                        <label class="block mb-1 text-sm font-medium text-gray-700">
+                            Select Subjects You Teach
+                        </label>
+                        <x-choices
+                            wire:model="selectedSubjects"
+                            :options="$this->subjects()"
+                            option-label="name"
+                            option-value="id"
+                            :searchable="true"
+                            multiple
+                        />
+                        @error('selectedSubjects') <span class="text-sm text-red-500">{{ $message }}</span> @enderror
+                    </div>
+                @elseif($role === 'client')
+                    <x-input
+                        label="Company Name"
+                        wire:model="company_name"
+                        icon="o-building-office"
+                        inline
+                        required
+                    />
+                    <x-input
+                        label="Position/Title"
+                        wire:model="position"
+                        icon="o-briefcase"
+                        inline
+                        required
+                    />
+                @endif
+
                 <div class="py-4 text-center">
                     <p class="text-gray-600">
                         @if($role === 'teacher')
                             Ready to complete your registration as a Teacher!
+                        @elseif($role === 'client')
+                            Ready to complete your registration as a Client!
                         @else
-                            Ready to complete your registration as a jio!
+                            Ready to complete your registration as a Parent!
                         @endif
                     </p>
                 </div>
@@ -293,6 +408,13 @@ new class extends Component {
             @endif
         </x-form>
 
+        @if(!empty($debug_message))
+        <div class="p-3 mt-4 text-sm bg-yellow-100 border border-yellow-300 rounded">
+            <p class="font-medium">Debug Info:</p>
+            <p>{{ $debug_message }}</p>
+        </div>
+        @endif
+
         <div class="mt-4 text-center">
             <a href="{{ route('login') }}" class="text-sm text-gray-600 hover:text-gray-900">
                 Already have an account?
@@ -300,6 +422,3 @@ new class extends Component {
         </div>
     </div>
 </div>
-
-
-

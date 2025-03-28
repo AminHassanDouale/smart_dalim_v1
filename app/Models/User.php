@@ -131,4 +131,22 @@ class User extends Authenticatable implements CanResetPassword {
     public function subjects(): BelongsToMany {
         return $this->belongsToMany(Subject::class, 'user_subjects');
     }
+    /**
+ * Get all children associated with the user (through parent profile).
+ */
+public function children()
+{
+    return $this->hasManyThrough(
+        Children::class,
+        ParentProfile::class,
+        'user_id',     // Foreign key on parent_profiles table
+        'parent_profile_id', // Foreign key on children table
+        'id',         // Local key on users table
+        'id'          // Local key on parent_profiles table
+    );
+}
+public function assignedHomework()
+{
+    return $this->hasMany(Homework::class, 'teacher_id');
+}
 }

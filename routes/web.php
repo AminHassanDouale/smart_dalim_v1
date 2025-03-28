@@ -28,98 +28,100 @@ Route::post('/logout', function () {
 // Parent Routes
 Route::middleware(['auth', 'role:parent'])->group(function () {
     // Profile Setup Route
-    Volt::route('/dashboard', 'parents.dashboard')
-        ->name('dashboard');
+    Volt::route('parents/dashboard', 'parents.dashboard')
+        ->name('parents.dashboard');
 
     // Profile Setup and Management
-    Volt::route('/profile-setup', 'parents.profile-setup.steps')
-        ->name('profile-setup');
+    Volt::route('/parents/profile-setup', 'parents.profile-setup.steps')
+        ->name('parents.profile-setup');
 
-    Volt::route('/profile', 'parents.profile')
-        ->name('profile');
+    Volt::route('/parents/profile', 'parents.profile')
+        ->name('parents.profile');
 
     Volt::route('/{user}/edit', 'parents.profile.edit')
-        ->name('profile.edit');
+        ->name('parents.profile.edit');
+        Volt::route('/parents/notification-preferences', 'parents.notification-preferences')
+    ->name('parents.notification-preferences');
 
     // Children Management
     Volt::route('/children', 'parents.children.index')
-        ->name('children.index');
+        ->name('parents.children.index');
 
     Volt::route('/children/create', 'parents.children.create')
-        ->name('children.create');
+        ->name('parents.children.create');
 
     Volt::route('/children/{child}', 'parents.children.show')
-        ->name('children.show');
+        ->name('parents.children.show');
 
     Volt::route('/children/{child}/edit', 'parents.children.edit')
-        ->name('children.edit');
+        ->name('parents.children.edit');
 
     // Calendar and Schedule Management
-    Volt::route('/calendar', 'parents.calendar')
-        ->name('calendar');
+    Volt::route('parents/calendar', 'parents.calendar')
+        ->name('parents.calendar');
 
     Volt::route('/schedule', 'parents.schedule.index')
-        ->name('schedule.index');
+        ->name('parents.schedule.index');
 
     // Learning Progress and Reports
     Volt::route('/progress', 'parents.progress.index')
-        ->name('progress.index');
+        ->name('parents.progress.index');
 
     Volt::route('/progress/{child}', 'parents.progress.child')
-        ->name('progress.child');
+        ->name('parents.progress.child');
 
     Volt::route('/reports', 'parents.reports.index')
-        ->name('reports.index');
+        ->name('parents.reports.index');
 
     Volt::route('/reports/{child}', 'parents.reports.child')
         ->name('reports.child');
 
     // Sessions and Lessons
     Volt::route('/sessions', 'parents.sessions.index')
-        ->name('sessions.index');
+        ->name('parents.sessions.index');
 
     Volt::route('/sessions/{session}', 'parents.sessions.show')
         ->name('sessions.show');
 
     Volt::route('/session-requests', 'parents.sessions.requests')
-        ->name('sessions.requests');
+        ->name('parents.sessions.requests');
 
     // Assessments and Homework
-    Volt::route('/assessments', 'parents.assessments.index')
-        ->name('assessments.index');
+    Volt::route('/assessments/{childId?}', 'parents.assessments.index')
+    ->name('parents.assessments.index');
 
-    Volt::route('/assessments/{assessment}', 'parents.assessments.show')
-        ->name('assessments.show');
+        Volt::route('/assessments/{id}/child/{childId}', 'parents.assessments.show')
+        ->name('parents.assessments.show');
 
     Volt::route('/homework', 'parents.homework.index')
-        ->name('homework.index');
+        ->name('parents.homework.index');
 
     Volt::route('/homework/{homework}', 'parents.homework.show')
-        ->name('homework.show');
+        ->name('parents.homework.show');
 
     // Learning Materials
     Volt::route('/materials', 'parents.materials.index')
-        ->name('materials.index');
+        ->name('parents.materials.index');
 
     Volt::route('/materials/{material}', 'parents.materials.show')
         ->name('materials.show');
 
     // Billing and Payments
-    Volt::route('/billing', 'parents.billing.index')
-        ->name('billing.index');
+        Volt::route('/billing', 'parents.billing.index')
+            ->name('parents.billing.index');
 
     Volt::route('/payments', 'parents.payments.index')
-        ->name('payments.index');
+        ->name('parents.payments.index');
 
     Volt::route('/invoices', 'parents.invoices.index')
-        ->name('invoices.index');
+        ->name('parents.invoices.index');
 
     Volt::route('/invoices/{invoice}', 'parents.invoices.show')
         ->name('invoices.show');
 
     // Communications
     Volt::route('/messages', 'parents.messages.index')
-        ->name('messages.index');
+        ->name('parents.messages.index');
 
     Volt::route('/messages/{conversation}', 'parents.messages.show')
         ->name('messages.show');
@@ -129,7 +131,7 @@ Route::middleware(['auth', 'role:parent'])->group(function () {
 
     // Support and Help
     Volt::route('/support', 'parents.support.index')
-        ->name('support.index');
+        ->name('parents.support.index');
 
     Volt::route('/support/create', 'parents.support.create')
         ->name('support.create');

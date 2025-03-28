@@ -8,30 +8,33 @@ class Course extends Model
 {
    use HasFactory;
    protected $fillable = [
-       'name',
-       'slug',
-       'description',
-       'level',
-       'duration',
-       'price',
-       'status', // active, inactive, draft
-       'teacher_profile_id',
-       'subject_id',
-       'curriculum',
-       'prerequisites',
-       'learning_outcomes',
-       'max_students',
-       'start_date',
-       'end_date'
-   ];
-   protected $casts = [
-       'curriculum' => 'array',
-       'prerequisites' => 'array',
-       'learning_outcomes' => 'array',
-       'price' => 'decimal:2',
-       'start_date' => 'datetime',
-       'end_date' => 'datetime'
-   ];
+    'name',
+    'slug',
+    'description',
+    'level',
+    'duration',
+    'price',
+    'status', // active, inactive, draft
+    'teacher_profile_id',
+    'subject_id',
+    'curriculum',
+    'prerequisites',
+    'learning_outcomes',
+    'max_students',
+    'start_date',
+    'end_date',
+    'cover_image' // Added cover_image to fillable
+];
+
+protected $casts = [
+    'curriculum' => 'array',
+    'prerequisites' => 'array',
+    'learning_outcomes' => 'array',
+    'price' => 'decimal:2',
+    'start_date' => 'date', // Changed to date to match the component
+    'end_date' => 'date', // Changed to date to match the component
+    'duration' => 'integer' // Added explicit cast for duration
+];
    public function teacher(): BelongsTo
    {
        return $this->belongsTo(TeacherProfile::class, 'teacher_profile_id');
@@ -58,4 +61,5 @@ class Course extends Model
    {
        return $this->hasMany(LearningSession::class);
    }
+   
 }

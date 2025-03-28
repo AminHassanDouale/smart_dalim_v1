@@ -12,6 +12,7 @@ class TeacherProfile extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id', // Add this!
         'whatsapp',
         'phone',
         'fix_number',
@@ -20,6 +21,15 @@ class TeacherProfile extends Model
         'place_of_birth',
         'has_completed_profile',
         'status'
+    ];
+
+    // Add default values for required fields
+    protected $attributes = [
+        'whatsapp' => '',
+        'phone' => '',
+        'place_of_birth' => '',
+        'has_completed_profile' => false,
+        'status' => 'submitted',
     ];
 
     protected $casts = [
@@ -49,12 +59,19 @@ class TeacherProfile extends Model
             self::STATUS_VERIFIED
         ];
     }
+
     public function subjects(): BelongsToMany
     {
         return $this->belongsToMany(Subject::class, 'subject_teacher', 'teacher_profile_id', 'subject_id');
     }
+
     public function materials()
-{
-    return $this->hasMany(Material::class);
-}
+    {
+        return $this->hasMany(Material::class);
+    }
+    public function courses()
+    {
+        return $this->hasMany(Course::class, 'teacher_profile_id');
+    }
+    
 }

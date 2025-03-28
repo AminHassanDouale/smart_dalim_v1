@@ -690,7 +690,7 @@ new class extends Component {
                 <p class="mt-1 text-base-content/70">Manage and track your child's learning sessions</p>
             </div>
             <div class="flex flex-wrap gap-2">
-                <a href="{{ route('sessions.requests') }}" class="btn btn-primary">
+                <a href="{{ route('parents.sessions.requests') }}" class="btn btn-primary">
                     <x-icon name="o-plus" class="w-4 h-4 mr-2" />
                     Request New Session
                 </a>
@@ -960,7 +960,7 @@ new class extends Component {
                             Clear Filters
                         </button>
                     @else
-                        <a href="{{ route('sessions.requests') }}" class="mt-4 btn btn-primary">
+                        <a href="{{ route('parents.sessions.requests') }}" class="mt-4 btn btn-primary">
                             Request New Session
                         </a>
                     @endif
