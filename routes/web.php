@@ -285,6 +285,220 @@ Route::middleware(['auth', 'role:client'])->group(function () {
 
 
 });
+
+
+
+
+// Admin Routes
+Route::middleware(['auth', 'role:admin'])->prefix('admin')->group(function () {
+    // Dashboard
+    Volt::route('/dashboard', 'admin.dashboard')
+        ->name('admin.dashboard');
+
+    // User Management
+    Route::prefix('users')->group(function () {
+        Volt::route('/', 'admin.users.index')
+            ->name('admin.users.index');
+        Volt::route('/create', 'admin.users.create')
+            ->name('admin.users.create');
+        Volt::route('/{user}', 'admin.users.show')
+            ->name('admin.users.show');
+        Volt::route('/{user}/edit', 'admin.users.edit')
+            ->name('admin.users.edit');
+
+        // User Role Specific Management
+        Route::get('/teachers', function() {
+            return view('admin.users.teachers.index');
+        })->name('admin.users.teachers.index');
+        Volt::route('/parents', 'admin.users.parents.index')
+            ->name('admin.users.parents.index');
+        Volt::route('/clients', 'admin.users.clients.index')
+            ->name('admin.users.clients.index');
+
+
+
+
+        // Verification Management
+        Volt::route('/verifications', 'admin.users.verifications.index')
+            ->name('admin.users.verifications.index');
+        Volt::route('/verifications/{id}', 'admin.users.verifications.show')
+            ->name('admin.users.verifications.show');
+    });
+
+    // Academic Management
+    Route::prefix('academic')->group(function () {
+        // Subjects
+        Volt::route('/subjects', 'admin.academic.subjects.index')
+            ->name('admin.academic.subjects.index');
+        Volt::route('/subjects/create', 'admin.academic.subjects.create')
+            ->name('admin.academic.subjects.create');
+        Volt::route('/subjects/{subject}/edit', 'admin.academic.subjects.edit')
+            ->name('admin.academic.subjects.edit');
+
+        // Courses
+        Volt::route('/courses', 'admin.academic.courses.index')
+            ->name('admin.academic.courses.index');
+        Volt::route('/courses/{course}', 'admin.academic.courses.show')
+            ->name('admin.academic.courses.show');
+        Volt::route('/courses/{course}/edit', 'admin.academic.courses.edit')
+            ->name('admin.academic.courses.edit');
+
+        // Materials
+        Volt::route('/materials', 'admin.academic.materials.index')
+            ->name('admin.academic.materials.index');
+        Volt::route('/materials/{material}', 'admin.academic.materials.show')
+            ->name('admin.academic.materials.show');
+
+        // Assessments
+        Volt::route('/assessments', 'admin.academic.assessments.index')
+            ->name('admin.academic.assessments.index');
+        Volt::route('/assessments/{assessment}', 'admin.academic.assessments.show')
+            ->name('admin.academic.assessments.show');
+    });
+
+    // Learning Sessions Management
+    Route::prefix('sessions')->group(function () {
+        Volt::route('/', 'admin.sessions.index')
+            ->name('admin.sessions.index');
+        Volt::route('/calendar', 'admin.sessions.calendar')
+            ->name('admin.sessions.calendar');
+        Volt::route('/requests', 'admin.sessions.requests')
+            ->name('admin.sessions.requests');
+        Volt::route('/{session}', 'admin.sessions.show')
+            ->name('admin.sessions.show');
+    });
+
+    // Financial Management
+    Route::prefix('finance')->group(function () {
+        Volt::route('/dashboard', 'admin.finance.dashboard')
+            ->name('admin.finance.dashboard');
+
+        // Invoices
+        Volt::route('/invoices', 'admin.finance.invoices.index')
+            ->name('admin.finance.invoices.index');
+        Volt::route('/invoices/create', 'admin.finance.invoices.create')
+            ->name('admin.finance.invoices.create');
+        Volt::route('/invoices/{invoice}', 'admin.finance.invoices.show')
+            ->name('admin.finance.invoices.show');
+        Volt::route('/invoices/{invoice}/edit', 'admin.finance.invoices.edit')
+            ->name('admin.finance.invoices.edit');
+
+        // Payments
+        Volt::route('/payments', 'admin.finance.payments.index')
+            ->name('admin.finance.payments.index');
+        Volt::route('/payments/{payment}', 'admin.finance.payments.show')
+            ->name('admin.finance.payments.show');
+
+        // Reports
+        Volt::route('/reports', 'admin.finance.reports.index')
+            ->name('admin.finance.reports.index');
+        Volt::route('/reports/revenue', 'admin.finance.reports.revenue')
+            ->name('admin.finance.reports.revenue');
+        Volt::route('/reports/transactions', 'admin.finance.reports.transactions')
+            ->name('admin.finance.reports.transactions');
+    });
+
+    // Support System
+    Route::prefix('support')->group(function () {
+        Volt::route('/tickets', 'admin.support.tickets.index')
+            ->name('admin.support.tickets.index');
+        Volt::route('/tickets/{ticket}', 'admin.support.tickets.show')
+            ->name('admin.support.tickets.show');
+
+        // FAQ Management
+        Volt::route('/faq', 'admin.support.faq.index')
+            ->name('admin.support.faq.index');
+        Volt::route('/faq/create', 'admin.support.faq.create')
+            ->name('admin.support.faq.create');
+        Volt::route('/faq/{faq}/edit', 'admin.support.faq.edit')
+            ->name('admin.support.faq.edit');
+    });
+
+    // Communications
+    Route::prefix('communications')->group(function () {
+        // Messages
+        Volt::route('/messages', 'admin.communications.messages.index')
+            ->name('admin.communications.messages.index');
+        Volt::route('/messages/{conversation}', 'admin.communications.messages.show')
+            ->name('admin.communications.messages.show');
+
+        // Notifications
+        Volt::route('/notifications', 'admin.communications.notifications.index')
+            ->name('admin.communications.notifications.index');
+        Volt::route('/notifications/create', 'admin.communications.notifications.create')
+            ->name('admin.communications.notifications.create');
+
+        // Announcements
+        Volt::route('/announcements', 'admin.communications.announcements.index')
+            ->name('admin.communications.announcements.index');
+        Volt::route('/announcements/create', 'admin.communications.announcements.create')
+            ->name('admin.communications.announcements.create');
+        Volt::route('/announcements/{announcement}/edit', 'admin.communications.announcements.edit')
+            ->name('admin.communications.announcements.edit');
+    });
+
+    // Analytics & Reports
+    Route::prefix('analytics')->group(function () {
+        Volt::route('/dashboard', 'admin.analytics.dashboard')
+            ->name('admin.analytics.dashboard');
+        Volt::route('/users', 'admin.analytics.users')
+            ->name('admin.analytics.users');
+        Volt::route('/sessions', 'admin.analytics.sessions')
+            ->name('admin.analytics.sessions');
+        Volt::route('/courses', 'admin.analytics.courses')
+            ->name('admin.analytics.courses');
+        Volt::route('/assessments', 'admin.analytics.assessments')
+            ->name('admin.analytics.assessments');
+        Volt::route('/export/{type}', 'admin.analytics.export')
+            ->name('admin.analytics.export');
+    });
+
+    // System Settings
+    Route::prefix('settings')->group(function () {
+        Volt::route('/general', 'admin.settings.general')
+            ->name('admin.settings.general');
+        Volt::route('/appearance', 'admin.settings.appearance')
+            ->name('admin.settings.appearance');
+        Volt::route('/email', 'admin.settings.email')
+            ->name('admin.settings.email');
+        Volt::route('/integrations', 'admin.settings.integrations')
+            ->name('admin.settings.integrations');
+        Volt::route('/roles-permissions', 'admin.settings.roles')
+            ->name('admin.settings.roles');
+        Volt::route('/backup', 'admin.settings.backup')
+            ->name('admin.settings.backup');
+        Volt::route('/logs', 'admin.settings.logs')
+            ->name('admin.settings.logs');
+    });
+
+    // Media Library
+    Route::prefix('media')->group(function () {
+        Volt::route('/', 'admin.media.index')
+            ->name('admin.media.index');
+        Volt::route('/upload', 'admin.media.upload')
+            ->name('admin.media.upload');
+        Volt::route('/{file}', 'admin.media.show')
+            ->name('admin.media.show');
+    });
+
+    // Monitoring & Logs
+    Route::prefix('monitoring')->group(function () {
+        Volt::route('/activity-logs', 'admin.monitoring.activity')
+            ->name('admin.monitoring.activity');
+        Volt::route('/system-health', 'admin.monitoring.health')
+            ->name('admin.monitoring.health');
+        Volt::route('/audit-trail', 'admin.monitoring.audit')
+            ->name('admin.monitoring.audit');
+    });
+
+    // Profile Management
+    Volt::route('/profile', 'admin.profile.show')
+        ->name('admin.profile.show');
+    Volt::route('/profile/edit', 'admin.profile.edit')
+        ->name('admin.profile.edit');
+    Volt::route('/profile/security', 'admin.profile.security')
+        ->name('admin.profile.security');
+});
 //quran
 // Quran Routes
 //Route::middleware(['auth'])->group(function () {

@@ -10,9 +10,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Contracts\Auth\CanResetPassword;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Spatie\Permission\Traits\HasRoles;
+
 
 class User extends Authenticatable implements CanResetPassword {
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
     /**
      * Role constants
@@ -20,6 +22,8 @@ class User extends Authenticatable implements CanResetPassword {
     public const ROLE_PARENT = 'parent';
     public const ROLE_TEACHER = 'teacher';
     public const ROLE_CLIENT = 'client'; // Add client role
+    public const ROLE_ADMIN = 'admin'; // Add admin role
+
 
     protected $fillable = [
         'name',
@@ -149,4 +153,36 @@ public function assignedHomework()
 {
     return $this->hasMany(Homework::class, 'teacher_id');
 }
+
+  /**
+     * Get user's custom notifications
+     */
+    public function notifications()
+    {
+        return $this->hasMany(Notification::class);
+    }
+
+      /**
+     * Get the support tickets for the user.
+     */
+    public function supportTickets()
+    {
+        return $this->hasMany(SupportTicket::class);
+    }
+
+    /**
+     * Get the invoices for the user.
+     */
+    public function invoices()
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    /**
+     * Get the support messages for the user.
+     */
+    public function supportMessages()
+    {
+        return $this->hasMany(SupportMessage::class);
+    }
 }

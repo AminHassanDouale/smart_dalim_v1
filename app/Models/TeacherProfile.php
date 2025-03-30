@@ -6,13 +6,27 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class TeacherProfile extends Model
 {
     use HasFactory;
 
+    /**
+     * Status constants
+     */
+    public const STATUS_SUBMITTED = 'submitted';
+    public const STATUS_CHECKING = 'checking';
+    public const STATUS_VERIFIED = 'verified';
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
     protected $fillable = [
-        'user_id', // Add this!
+        'user_id',
         'whatsapp',
         'phone',
         'fix_number',
@@ -20,10 +34,18 @@ class TeacherProfile extends Model
         'date_of_birth',
         'place_of_birth',
         'has_completed_profile',
-        'status'
+        'status',
+        'bio',
+        'education',
+        'experience',
+        'specialization'
     ];
 
-    // Add default values for required fields
+    /**
+     * Default values for required fields
+     *
+     * @var array
+     */
     protected $attributes = [
         'whatsapp' => '',
         'phone' => '',
@@ -32,25 +54,77 @@ class TeacherProfile extends Model
         'status' => 'submitted',
     ];
 
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array<string, string>
+     */
     protected $casts = [
         'date_of_birth' => 'date',
         'has_completed_profile' => 'boolean',
+        'education' => 'json',
+        'experience' => 'json',
     ];
 
-    const STATUS_SUBMITTED = 'submitted';
-    const STATUS_CHECKING = 'checking';
-    const STATUS_VERIFIED = 'verified';
-
+    /**
+     * Get the user that owns the teacher profile.
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    public function files()
+    /**
+     * Get the files for the teacher profile.
+     */
+    public function files(): MorphMany
     {
         return $this->morphMany(File::class, 'model');
     }
 
+    /**
+     * Get the subjects associated with the teacher.
+     */
+    public function subjects(): BelongsToMany
+    {
+        return $this->belongsToMany(Subject::class, 'subject_teacher', 'teacher_profile_id', 'subject_id');
+    }
+
+    /**
+     * Get the courses created by the teacher.
+     */
+    public function courses(): HasMany
+    {
+        return $this->hasMany(Course::class, 'teacher_profile_id');
+    }
+
+    /**
+     * Get the materials created by the teacher.
+     */
+    public function materials(): HasMany
+    {
+        return $this->hasMany(Material::class);
+    }
+
+    /**
+     * Get the assessments created by the teacher.
+     */
+    public function assessments(): HasMany
+    {
+        return $this->hasMany(Assessment::class);
+    }
+
+    /**
+     * Get the teacher's students.
+     */
+    public function students(): HasMany
+    {
+        return $this->hasMany(Children::class, 'teacher_id', 'user_id');
+    }
+
+    /**
+     * Get all available statuses.
+     */
     public static function getStatuses(): array
     {
         return [
@@ -60,18 +134,35 @@ class TeacherProfile extends Model
         ];
     }
 
-    public function subjects(): BelongsToMany
+    /**
+     * Check if the profile is submitted
+     */
+    public function isSubmitted(): bool
     {
-        return $this->belongsToMany(Subject::class, 'subject_teacher', 'teacher_profile_id', 'subject_id');
+        return $this->status === self::STATUS_SUBMITTED;
     }
 
-    public function materials()
+    /**
+     * Check if the profile is being checked
+     */
+    public function isChecking(): bool
     {
-        return $this->hasMany(Material::class);
+        return $this->status === self::STATUS_CHECKING;
     }
-    public function courses()
+
+    /**
+     * Check if the profile is verified
+     */
+    public function isVerified(): bool
     {
-        return $this->hasMany(Course::class, 'teacher_profile_id');
+        return $this->status === self::STATUS_VERIFIED;
     }
-    
+
+    /**
+     * Get upcoming learning sessions for this teacher.
+     */
+    public function learningSessions(): HasMany
+    {
+        return $this->hasMany(LearningSession::class, 'teacher_id', 'user_id');
+    }
 }

@@ -17,6 +17,15 @@ class UserSeeder extends Seeder
     public function run(): void
     {
         // Create regular parent users
+
+        User::create([
+            'name' => 'Admin User',
+            'email' => 'admin@example.com',
+            'password' => Hash::make('password123'), // Better to use an environment variable in production
+            'role' => User::ROLE_ADMIN,
+            'username' => 'admin', // Add the username field
+            'email_verified_at' => now(),
+        ]);
         for ($i = 1; $i <= 5; $i++) {
             $user = User::create([
                 'name' => fake()->name(),

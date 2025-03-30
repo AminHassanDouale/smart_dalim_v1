@@ -50,6 +50,10 @@ class extends Component
                     $this->redirect('/clients/dashboard', navigate: true);
                 }
                 return;
+            } if ($user->role === 'admin') {
+                // Redirect admin directly to the admin dashboard
+                $this->redirect('/admin/dashboard', navigate: true);
+                return;
             }
 
             $this->redirect('/home', navigate: true);
