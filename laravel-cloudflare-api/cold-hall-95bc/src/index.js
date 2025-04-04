@@ -3,10 +3,12 @@ export default {
 	  const url = new URL(request.url);
 	  const pathname = url.pathname;
 
-	  // Serve static assets like index.html
-	  const assetResponse = await env.ASSETS.fetch(request);
-	  if (assetResponse.status !== 404) {
-		return assetResponse;
+	  // Serve static assets directly from Workers
+	  if (pathname.endsWith('.css') || pathname.endsWith('.js') || pathname.endsWith('.jpg') || pathname.endsWith('.png')) {
+		const assetResponse = await env.ASSETS.fetch(request);
+		if (assetResponse.status !== 404) {
+		  return assetResponse;
+		}
 	  }
 
 	  // Custom endpoints
@@ -23,7 +25,12 @@ export default {
 		});
 	  }
 
-	  // Fallback 404
-	  return new Response('Not Found', { status: 404 });
+	  // Forward everything else to your PHP server
+	  // Replace with your actual PHP server URL (e.g., a VPS or shared hosting)
+	  return fetch('https://your-php-server.example.com' + pathname + url.search, {
+		method: request.method,
+		headers: request.headers,
+		body: request.body
+	  });
 	}
   };
