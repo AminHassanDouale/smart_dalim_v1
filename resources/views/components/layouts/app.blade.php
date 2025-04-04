@@ -15,6 +15,9 @@
     <link rel="mask-icon" href="{{ asset('/favicon.ico') }}" color="#ff2d20">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+    <link rel="stylesheet" href="{{ asset('build/assets/app-BlW2ntrH.css ') }}">
+    <script src="{{ asset('build/assets/app-D5wVyTpJ.js') }}"></script>
+
     {{--  Meta description  --}}
     <meta name="description" content="Orange - Livewire 3 demo built with MaryUI">
 

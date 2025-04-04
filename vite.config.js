@@ -9,11 +9,7 @@ export default defineConfig({
         }),
     ],
     build: {
-        // Generate manifest.json in the build
-        manifest: true,
-        outDir: 'public/build',
         rollupOptions: {
-            // Ensure external dependencies are properly handled
             output: {
                 manualChunks: {
                     vendor: ['pusher-js', 'laravel-echo'],
