@@ -1,23 +1,45 @@
 {
     "version": 2,
-    "builds": [
-      {
-        "src": "api/index.php",
-        "use": "vercel-php@1.0.0"
-      },
-      {
-        "src": "public/**",
-        "use": "@vercel/static"
+    "framework": null,
+    "functions": {
+      "api/*.php": {
+        "runtime": "vercel-php@0.6.0"
       }
-    ],
+    },
+    "buildCommand": "./vercel-build.sh",
+    "outputDirectory": "public",
     "routes": [
       {
-        "src": "/(css|js|images|fonts)/(.*)",
-        "dest": "public/$1/$2"
+        "src": "/build/(.*)",
+        "dest": "/public/build/$1"
+      },
+      {
+        "src": "/(css|js|images|fonts|assets)/(.*)",
+        "dest": "/public/$1/$2"
+      },
+      {
+        "src": "/(favicon\\.ico|robots\\.txt|manifest\\.json)",
+        "dest": "/public/$1"
+      },
+      {
+        "src": "/(.*\\.[^/]+)$",
+        "dest": "/public/$1"
       },
       {
         "src": "/(.*)",
         "dest": "/api/index.php"
       }
-    ]
+    ],
+    "env": {
+      "APP_NAME": "Orange - MaryUI demo",
+      "APP_ENV": "production",
+      "APP_DEBUG": "false",
+      "APP_URL": "https://smartdalib.work",
+      "LOG_CHANNEL": "stack",
+      "CACHE_DRIVER": "array",
+      "SESSION_DRIVER": "cookie",
+      "FILESYSTEM_DISK": "public",
+      "DB_CONNECTION": "mysql",
+      "ASSET_URL": "https://smartdalib.work"
+    }
   }
