@@ -1,0 +1,16 @@
+{
+    "version": 2,
+    "buildCommand": "composer install && npm ci && npm run build",
+    "outputDirectory": "public",
+    "devCommand": "php artisan serve --port=$PORT",
+    "functions": {
+        "api/*.php": {
+            "runtime": "vercel-php@0.6.0"
+        }
+    },
+    "routes": [
+        { "src": "/(css|js|images|fonts|assets|build)/(.*)", "dest": "/public/$1/$2" },
+        { "src": "/(favicon\\.ico|robots\\.txt|sitemap\\.xml)", "dest": "/public/$1" },
+        { "src": "/(.*)", "dest": "/api/index.php" }
+    ]
+}
