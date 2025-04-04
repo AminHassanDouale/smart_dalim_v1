@@ -1,29 +1,27 @@
-addEventListener('fetch', event => {
-	event.respondWith(handleRequest(event.request))
-  })
+export default {
+	async fetch(request, env, ctx) {
+	  const url = new URL(request.url);
+	  const path = url.pathname;
 
-  async function handleRequest(request) {
-	const url = new URL(request.url)
-	const path = url.pathname
+	  // Handle API routes
+	  if (path.startsWith('/api/')) {
+		return handleApiRequest(request, path, env);
+	  }
 
-	// Handle API routes
-	if (path.startsWith('/api/')) {
-	  return handleApiRequest(request, path)
+	  // Default route
+	  return new Response("Hello, World!", {
+		headers: { 'Content-Type': 'text/plain' },
+	  });
 	}
+  };
 
-	// Default route
-	return new Response("Hello, World!", {
-	  headers: { 'Content-Type': 'text/plain' },
-	})
-  }
-
-  async function handleApiRequest(request, path) {
+  async function handleApiRequest(request, path, env) {
 	// Handle users endpoint
 	if (path === '/api/users') {
 	  if (request.method === 'GET') {
 		try {
 		  // Query the D1 database for users
-		  const { results } = await DB.prepare(
+		  const { results } = await env.DB.prepare(
 			"SELECT * FROM users"
 		  ).all();
 
@@ -32,7 +30,7 @@ addEventListener('fetch', event => {
 			data: results
 		  }), {
 			headers: { 'Content-Type': 'application/json' }
-		  })
+		  });
 		} catch (error) {
 		  return new Response(JSON.stringify({
 			success: false,
@@ -40,7 +38,7 @@ addEventListener('fetch', event => {
 		  }), {
 			status: 500,
 			headers: { 'Content-Type': 'application/json' }
-		  })
+		  });
 		}
 	  } else if (request.method === 'POST') {
 		try {
@@ -53,11 +51,11 @@ addEventListener('fetch', event => {
 			}), {
 			  status: 400,
 			  headers: { 'Content-Type': 'application/json' }
-			})
+			});
 		  }
 
 		  // Insert user into database
-		  const result = await DB.prepare(
+		  const result = await env.DB.prepare(
 			"INSERT INTO users (name, email) VALUES (?, ?)"
 		  ).bind(data.name, data.email).run();
 
@@ -67,7 +65,7 @@ addEventListener('fetch', event => {
 		  }), {
 			status: 201,
 			headers: { 'Content-Type': 'application/json' }
-		  })
+		  });
 		} catch (error) {
 		  return new Response(JSON.stringify({
 			success: false,
@@ -75,20 +73,20 @@ addEventListener('fetch', event => {
 		  }), {
 			status: 500,
 			headers: { 'Content-Type': 'application/json' }
-		  })
+		  });
 		}
 	  }
 	}
 
 	// Handle specific user endpoints
-	const userIdMatch = path.match(/^\/api\/users\/(\d+)$/)
+	const userIdMatch = path.match(/^\/api\/users\/(\d+)$/);
 	if (userIdMatch) {
-	  const userId = userIdMatch[1]
+	  const userId = userIdMatch[1];
 
 	  if (request.method === 'GET') {
 		try {
 		  // Get user by ID
-		  const { results } = await DB.prepare(
+		  const { results } = await env.DB.prepare(
 			"SELECT * FROM users WHERE id = ?"
 		  ).bind(userId).all();
 
@@ -99,7 +97,7 @@ addEventListener('fetch', event => {
 			}), {
 			  status: 404,
 			  headers: { 'Content-Type': 'application/json' }
-			})
+			});
 		  }
 
 		  return new Response(JSON.stringify({
@@ -107,7 +105,7 @@ addEventListener('fetch', event => {
 			data: results[0]
 		  }), {
 			headers: { 'Content-Type': 'application/json' }
-		  })
+		  });
 		} catch (error) {
 		  return new Response(JSON.stringify({
 			success: false,
@@ -115,14 +113,14 @@ addEventListener('fetch', event => {
 		  }), {
 			status: 500,
 			headers: { 'Content-Type': 'application/json' }
-		  })
+		  });
 		}
 	  } else if (request.method === 'PUT') {
 		try {
 		  const data = await request.json();
 
 		  // Update user in database
-		  await DB.prepare(
+		  await env.DB.prepare(
 			"UPDATE users SET name = ?, email = ? WHERE id = ?"
 		  ).bind(data.name, data.email, userId).run();
 
@@ -131,7 +129,7 @@ addEventListener('fetch', event => {
 			message: 'User updated successfully'
 		  }), {
 			headers: { 'Content-Type': 'application/json' }
-		  })
+		  });
 		} catch (error) {
 		  return new Response(JSON.stringify({
 			success: false,
@@ -139,12 +137,12 @@ addEventListener('fetch', event => {
 		  }), {
 			status: 500,
 			headers: { 'Content-Type': 'application/json' }
-		  })
+		  });
 		}
 	  } else if (request.method === 'DELETE') {
 		try {
 		  // Delete user from database
-		  await DB.prepare(
+		  await env.DB.prepare(
 			"DELETE FROM users WHERE id = ?"
 		  ).bind(userId).run();
 
@@ -153,7 +151,7 @@ addEventListener('fetch', event => {
 			message: 'User deleted successfully'
 		  }), {
 			headers: { 'Content-Type': 'application/json' }
-		  })
+		  });
 		} catch (error) {
 		  return new Response(JSON.stringify({
 			success: false,
@@ -161,7 +159,7 @@ addEventListener('fetch', event => {
 		  }), {
 			status: 500,
 			headers: { 'Content-Type': 'application/json' }
-		  })
+		  });
 		}
 	  }
 	}
@@ -173,5 +171,5 @@ addEventListener('fetch', event => {
 	}), {
 	  status: 404,
 	  headers: { 'Content-Type': 'application/json' }
-	})
+	});
   }
