@@ -185,4 +185,22 @@ public function assignedHomework()
     {
         return $this->hasMany(SupportMessage::class);
     }
+
+    /**
+ * Get the classes that belong to the teacher.
+ */
+public function classes()
+{
+    return $this->hasMany(Course::class, 'teacher_profile_id', 'id');
+    // Or if you have a specific Class model:
+    // return $this->hasMany(ClassModel::class, 'teacher_id');
+}
+/**
+ * Get the students associated with the teacher.
+ */
+public function students()
+{
+    // Based on your models, I'm assuming a teacher might have students through the Children model
+    return $this->hasMany(Children::class, 'teacher_id');
+}
 }

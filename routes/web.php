@@ -9,6 +9,8 @@ Volt::route('/', 'welcome')->name('welcome');
 Volt::route('/login', 'login')->name('login');
 Volt::route('/register', 'register')->name('register');
 
+
+
 // Password Reset Routes
 Volt::route('/forgot-password', 'auth.forgot-password')
     ->name('password.request');
@@ -291,40 +293,62 @@ Route::middleware(['auth', 'role:client'])->group(function () {
 
 // Admin Routes
 Route::middleware(['auth', 'role:admin'])->prefix('admin')->group(function () {
-    // Dashboard
     Volt::route('/dashboard', 'admin.dashboard')
-        ->name('admin.dashboard');
+    ->name('admin.dashboard');
 
-    // User Management
-    Route::prefix('users')->group(function () {
-        Volt::route('/', 'admin.users.index')
-            ->name('admin.users.index');
-        Volt::route('/create', 'admin.users.create')
-            ->name('admin.users.create');
-        Volt::route('/{user}', 'admin.users.show')
-            ->name('admin.users.show');
-        Volt::route('/{user}/edit', 'admin.users.edit')
-            ->name('admin.users.edit');
+// User Management
+Route::prefix('users')->group(function () {
+    Volt::route('/', 'admin.users.index')
+        ->name('admin.users.index');
+    Volt::route('/create', 'admin.users.create')
+        ->name('admin.users.create');
+    Volt::route('/{user}', 'admin.users.show')
+        ->name('admin.users.show');
+    Volt::route('/{user}/edit', 'admin.users.edit')
+        ->name('admin.users.edit');
 
-        // User Role Specific Management
-        Route::get('/teachers', function() {
-            return view('admin.users.teachers.index');
-        })->name('admin.users.teachers.index');
-        Volt::route('/parents', 'admin.users.parents.index')
-            ->name('admin.users.parents.index');
-        Volt::route('/clients', 'admin.users.clients.index')
-            ->name('admin.users.clients.index');
+    // Verification Management
+    Volt::route('/verifications', 'admin.users.verifications.index')
+        ->name('admin.users.verifications.index');
+    Volt::route('/verifications/{id}', 'admin.users.verifications.show')
+        ->name('admin.users.verifications.show');
+});
 
+// Teacher Management
+Route::prefix('teachers')->group(function () {
+    Volt::route('/', 'admin.teachers.index')
+        ->name('admin.teachers.index');
+    Volt::route('/create', 'admin.teachers.create')
+        ->name('admin.teachers.create');
+    Volt::route('/{teacher}', 'admin.teachers.show')
+        ->name('admin.teachers.show');
+    Volt::route('/{teacher}/edit', 'admin.teachers.edit')
+        ->name('admin.teachers.edit');
+});
 
+// Parent Management
+Route::prefix('parents')->group(function () {
+    Volt::route('/', 'admin.parents.index')
+        ->name('admin.parents.index');
+    Volt::route('/create', 'admin.parents.create')
+        ->name('admin.parents.create');
+    Volt::route('/{parent}', 'admin.parents.show')
+        ->name('admin.parents.show');
+    Volt::route('/{parent}/edit', 'admin.parents.edit')
+        ->name('admin.parents.edit');
+});
 
-
-        // Verification Management
-        Volt::route('/verifications', 'admin.users.verifications.index')
-            ->name('admin.users.verifications.index');
-        Volt::route('/verifications/{id}', 'admin.users.verifications.show')
-            ->name('admin.users.verifications.show');
-    });
-
+// Client Management
+Route::prefix('clients')->group(function () {
+    Volt::route('/', 'admin.clients.index')
+        ->name('admin.clients.index');
+    Volt::route('/create', 'admin.clients.create')
+        ->name('admin.clients.create');
+    Volt::route('/{client}', 'admin.clients.show')
+        ->name('admin.clients.show');
+    Volt::route('/{client}/edit', 'admin.clients.edit')
+        ->name('admin.clients.edit');
+});
     // Academic Management
     Route::prefix('academic')->group(function () {
         // Subjects

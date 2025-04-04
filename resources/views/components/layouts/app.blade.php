@@ -25,15 +25,17 @@
 {{-- The navbar with `sticky` and `full-width` --}}
 <x-nav sticky>
 
+    <x-nav sticky>
+        {{-- Right side actions --}}
+        <x-slot:actions>
 
-    {{-- Right side actions --}}
-    <x-slot:actions>
-
-    </x-slot:actions>
+        </x-slot:actions>
+    </x-nav>
 </x-nav>
 
 <x-main>
     <x-slot:content>
+
         {{ $slot }}
     </x-slot:content>
 </x-main>

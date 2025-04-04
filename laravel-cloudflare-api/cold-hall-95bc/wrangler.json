@@ -1,0 +1,23 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "cold-hall-95bc",
+	"main": "src/index.js",
+	"compatibility_date": "2025-04-04",
+	"compatibility_flags": [
+	  "nodejs_compat"
+	],
+	"assets": {
+	  "binding": "ASSETS",
+	  "directory": "./public"
+	},
+	"observability": {
+	  "enabled": true
+	},
+	"d1_databases": [
+	  {
+		"binding": "DB",
+		"database_name": "smartilm",
+		"database_id": "4be57821-eb43-40ce-83e0-41635c7cbff1"
+	  }
+	]
+  }
