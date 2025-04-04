@@ -16,9 +16,7 @@ class UserController extends Controller
     }
 
     /**
-     * Display a listing of the users.
-     *
-     * @return \Illuminate\Http\Response
+     * Display a listing of users.
      */
     public function index()
     {
@@ -32,8 +30,6 @@ class UserController extends Controller
 
     /**
      * Show the form for creating a new user.
-     *
-     * @return \Illuminate\Http\Response
      */
     public function create()
     {
@@ -41,31 +37,25 @@ class UserController extends Controller
     }
 
     /**
-     * Store a newly created user in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * Store a newly created user.
      */
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255',
         ]);
 
         try {
-            $result = $this->d1Service->createUser($validated);
-            return redirect()->route('users.index')->with('success', 'User created successfully');
+            $this->d1Service->createUser($request->only(['name', 'email']));
+            return redirect()->route('users.index')->with('success', 'User created successfully!');
         } catch (Exception $e) {
-            return back()->withInput()->with('error', $e->getMessage());
+            return back()->with('error', $e->getMessage())->withInput();
         }
     }
 
     /**
      * Display the specified user.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
      */
     public function show($id)
     {
@@ -79,9 +69,6 @@ class UserController extends Controller
 
     /**
      * Show the form for editing the specified user.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
      */
     public function edit($id)
     {
@@ -94,38 +81,31 @@ class UserController extends Controller
     }
 
     /**
-     * Update the specified user in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * Update the specified user.
      */
     public function update(Request $request, $id)
     {
-        $validated = $request->validate([
+        $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255',
         ]);
 
         try {
-            $result = $this->d1Service->updateUser($id, $validated);
-            return redirect()->route('users.index')->with('success', 'User updated successfully');
+            $this->d1Service->updateUser($id, $request->only(['name', 'email']));
+            return redirect()->route('users.index')->with('success', 'User updated successfully!');
         } catch (Exception $e) {
-            return back()->withInput()->with('error', $e->getMessage());
+            return back()->with('error', $e->getMessage())->withInput();
         }
     }
 
     /**
-     * Remove the specified user from storage.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * Remove the specified user.
      */
     public function destroy($id)
     {
         try {
-            $result = $this->d1Service->deleteUser($id);
-            return redirect()->route('users.index')->with('success', 'User deleted successfully');
+            $this->d1Service->deleteUser($id);
+            return redirect()->route('users.index')->with('success', 'User deleted successfully!');
         } catch (Exception $e) {
             return back()->with('error', $e->getMessage());
         }
